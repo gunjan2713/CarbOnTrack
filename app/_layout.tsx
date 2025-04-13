@@ -1,7 +1,17 @@
 import { Stack } from "expo-router";
-import './global.css';
+import { TripProvider } from "./context/TripContext";
+import "../global.css";
 
 
 export default function RootLayout() {
-  return <Stack />;
+  return (
+    <TripProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: "white" },
+        }}
+      />
+    </TripProvider>
+  );
 }
