@@ -1,6 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 import { Alert } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { sendTripDetectionNotification, registerForPushNotificationsAsync } from './notificationService';
 
 // Define TypeScript interfaces
 export interface LocationPoint {
@@ -41,6 +43,8 @@ interface TripContextType {
   endTrip: () => void;
   selectTransportMode: (transportMode: TransportMode) => void;
   calculateEmissions: () => number;
+  showTransportModal: boolean;
+  setShowTransportModal: (show: boolean) => void;
 }
 
 // Define available transport modes
@@ -70,6 +74,42 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentLocation, setCurrentLocation] = useState<LocationPoint | null>(null);
   const [locationSubscription, setLocationSubscription] = useState<Location.LocationSubscription | null>(null);
   const [lowSpeedStartTime, setLowSpeedStartTime] = useState<number | null>(null);
+  const [showTransportModal, setShowTransportModal] = useState<boolean>(false);
+  const notificationListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.Subscription>();
+
+  // Set up notification listeners
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+
+    // This listener is fired whenever a notification is received while the app is foregrounded
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+      console.log('Notification received:', notification);
+    });
+
+    // This listener is fired whenever a user taps on or interacts with a notification
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('Notification response received:', response);
+      const data = response.notification.request.content.data;
+      
+      if (data?.type === 'trip_detection') {
+        // User tapped on trip detection notification, we should start the trip and show transport modal
+        startTrip();
+        setShowTransportModal(true);
+      }
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, []);
+
+
 
   // Request location permissions
   const requestLocationPermissions = async () => {
@@ -148,22 +188,24 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Handle potential trip start based on speed
-  const handlePotentialTripStart = (location: LocationPoint) => {
+  const handlePotentialTripStart = async (location: LocationPoint) => {
     // In a real app, you might want to wait for consistent speed for a few seconds
-    Alert.alert(
-      'Trip Detected',
-      'It looks like you started a trip. Would you like to track it?',
-      [
-        {
-          text: 'No',
-          style: 'cancel',
-        },
-        {
-          text: 'Yes',
-          onPress: () => startTrip(),
-        },
-      ]
-    );
+    // Alert.alert(
+    //   'Trip Detected',
+    //   'It looks like you started a trip. Would you like to track it?',
+    //   [
+    //     {
+    //       text: 'No',
+    //       style: 'cancel',
+    //     },
+    //     {
+    //       text: 'Yes',
+    //       onPress: () => startTrip(),
+    //     },
+    //   ]
+    // );
+    // Send notification instead of showing Alert
+    await sendTripDetectionNotification();
   };
 
   // Handle updates for an active trip
@@ -252,7 +294,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setTrip(updatedTrip);
     setLowSpeedStartTime(null);
 
-    // Here you would typically save the trip to storage
+    // Here we would typically save the trip to storage
     console.log('Trip ended:', updatedTrip);
 
     // Alert the user with trip summary
@@ -334,6 +376,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     endTrip,
     selectTransportMode,
     calculateEmissions,
+    showTransportModal,
+    setShowTransportModal,
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;
@@ -347,3 +391,23 @@ export const useTrip = () => {
   }
   return context;
 };
+
+// Define the background task
+import * as TaskManager from 'expo-task-manager';
+
+const LOCATION_TRACKING = 'trip-tracking';
+
+TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
+  if (error) {
+    console.error('Location tracking task error:', error);
+    return;
+  }
+  if (data) {
+    const { locations } = data as { locations: Location.LocationObject[] };
+    // Process the locations data
+    console.log('Received background location update:', locations);
+    
+    // This is where you would implement background trip detection logic
+    // For example, you might send another notification
+  }
+});

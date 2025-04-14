@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTrip, TransportMode } from '../context/TripContext';
 import { Ionicons } from '@expo/vector-icons';
+// this is just for test the notification functionality.
+// import { sendTripDetectionNotification } from '../context/notificationService';
 
 export default function HomeScreen() {
   const {
@@ -14,9 +16,11 @@ export default function HomeScreen() {
     startTrip,
     endTrip,
     selectTransportMode,
+    showTransportModal,
+    setShowTransportModal
   } = useTrip();
 
-  const [showTransportModal, setShowTransportModal] = useState(false);
+  // const [showTransportModal, setShowTransportModal] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   
   // Start trip detection when component loads
@@ -179,6 +183,10 @@ export default function HomeScreen() {
           </Text>
           <Text className="text-gray-700 mb-2">
             • Select your transport mode to calculate emissions
+          </Text>
+          {/* ADD THIS NEW LINE */}
+          <Text className="text-gray-700 mb-2">
+            • You'll receive a notification when a trip is detected
           </Text>
           <Text className="text-gray-700">
             • Trip automatically ends after 3 minutes of being stationary
