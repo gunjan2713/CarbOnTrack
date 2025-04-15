@@ -3,6 +3,8 @@ import * as Location from 'expo-location';
 import { Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { sendTripDetectionNotification, registerForPushNotificationsAsync } from './notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as TaskManager from 'expo-task-manager';
 
 // Define TypeScript interfaces
 export interface LocationPoint {
@@ -47,7 +49,7 @@ interface TripContextType {
   setShowTransportModal: (show: boolean) => void;
 }
 
-// Define available transport modes
+// Define available transport modes for now but we can integrate the LLM api later to recognize the transport model from user input.
 const TRANSPORT_MODES: TransportMode[] = [
   { id: 'car-petrol', name: 'Car (Petrol)', emissionFactor: 0.192, icon: '🚗' },
   { id: 'car-diesel', name: 'Car (Diesel)', emissionFactor: 0.171, icon: '🚙' },
@@ -63,6 +65,12 @@ const TRANSPORT_MODES: TransportMode[] = [
 const TRIP_START_SPEED_THRESHOLD = 20; // km/h
 const TRIP_END_SPEED_THRESHOLD = 5; // km/h
 const TRIP_END_DURATION_THRESHOLD = 3 * 60 * 1000; // 3 minutes in milliseconds
+
+// Storage keys for persisting trip detection state between task executions
+const LAST_LOCATIONS_KEY = 'carbontrack:lastLocations';
+const TRIP_ACTIVE_KEY = 'carbontrack:tripActive';
+const LOW_SPEED_START_TIME_KEY = 'carbontrack:lowSpeedStartTime';
+const TRIP_DETECTION_ENABLED_KEY = 'carbontrack:tripDetectionEnabled';
 
 // Create context
 const TripContext = createContext<TripContextType | undefined>(undefined);
@@ -111,6 +119,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 
 
+
+
+
   // Request location permissions
   const requestLocationPermissions = async () => {
     const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
@@ -135,6 +146,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setIsDetectingTrip(true);
 
+    // Store that trip detection is enabled
+    await AsyncStorage.setItem(TRIP_DETECTION_ENABLED_KEY, 'true');
+
     // Configure location tracking
     await Location.startLocationUpdatesAsync('trip-tracking', {
       accuracy: Location.Accuracy.BestForNavigation,
@@ -146,7 +160,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       },
     });
 
-    // Set up location subscription
+    // Set up location subscription when the app is in the foreground
     const subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.BestForNavigation,
@@ -178,18 +192,22 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Stop trip detection
-  const stopTripDetection = () => {
+  const stopTripDetection = async () => {
     if (locationSubscription) {
       locationSubscription.remove();
       setLocationSubscription(null);
     }
-    Location.stopLocationUpdatesAsync('trip-tracking').catch(console.error);
+
+    // Store that trip detection is disabled
+    await AsyncStorage.setItem(TRIP_DETECTION_ENABLED_KEY, 'false');
+
+    await Location.stopLocationUpdatesAsync('trip-tracking').catch(console.error);
     setIsDetectingTrip(false);
   };
 
   // Handle potential trip start based on speed
   const handlePotentialTripStart = async (location: LocationPoint) => {
-    // In a real app, you might want to wait for consistent speed for a few seconds
+    // this is what we have implemented earlier.
     // Alert.alert(
     //   'Trip Detected',
     //   'It looks like you started a trip. Would you like to track it?',
@@ -262,8 +280,41 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   };
 
+  useEffect(() => {
+    const checkBackgroundTrips = async () => {
+      try {
+        // Check if we have an active trip from background detection
+        const tripActiveStr = await AsyncStorage.getItem(TRIP_ACTIVE_KEY);
+        const tripActive = tripActiveStr === 'true';
+        
+        // If the app state shows no active trip but storage indicates one is active
+        if (tripActive && !trip?.isActive) {
+          // We may need to load the trip state from storage
+          // For simplicity, we'll just show the transport modal to continue the trip
+          setShowTransportModal(true);
+        }
+        
+        // Similar logic for trip end detection
+        const lowSpeedStartTimeStr = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);
+        if (lowSpeedStartTimeStr && trip?.isActive) {
+          const lowSpeedStartTime = parseInt(lowSpeedStartTimeStr, 10);
+          const now = Date.now();
+          
+          if (now - lowSpeedStartTime > TRIP_END_DURATION_THRESHOLD) {
+            // Trip potentially ended while app was in background
+            handlePotentialTripEnd();
+          }
+        }
+      } catch (error) {
+        console.error('Error checking background trips:', error);
+      }
+    };
+    
+    checkBackgroundTrips();
+  }, []);
+
   // Start a new trip
-  const startTrip = () => {
+  const startTrip = async () => {
     if (!currentLocation) return;
 
     const newTrip: Trip = {
@@ -275,12 +326,15 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       locations: [currentLocation],
     };
 
+    // Store trip active state for background task
+    await AsyncStorage.setItem(TRIP_ACTIVE_KEY, 'true');
+
     setTrip(newTrip);
     setLowSpeedStartTime(null);
   };
 
   // End the current trip
-  const endTrip = () => {
+  const endTrip = async () => {
     if (!trip || !currentLocation) return;
 
     const updatedTrip: Trip = {
@@ -290,6 +344,10 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isActive: false,
       carbonEmissions: calculateEmissions(),
     };
+
+    // Update storage to reflect trip is no longer active
+    await AsyncStorage.setItem(TRIP_ACTIVE_KEY, 'false');
+    await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
 
     setTrip(updatedTrip);
     setLowSpeedStartTime(null);
@@ -392,22 +450,158 @@ export const useTrip = () => {
   return context;
 };
 
-// Define the background task
-import * as TaskManager from 'expo-task-manager';
 
 const LOCATION_TRACKING = 'trip-tracking';
+
+
+// Convert speed from m/s to km/h
+const msToKmh = (speedMs: number | null): number => {
+  if (speedMs === null) return 0;
+  return speedMs * 3.6;
+};
+
+// Save detection state to AsyncStorage
+const saveDetectionState = async (
+  tripActive: boolean, 
+  lowSpeedStartTime: number | null = null,
+  lastLocations: Location.LocationObject[] = []
+) => {
+  try {
+    await AsyncStorage.setItem(TRIP_ACTIVE_KEY, JSON.stringify(tripActive));
+    
+    if (lowSpeedStartTime !== null) {
+      await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, JSON.stringify(lowSpeedStartTime));
+    }
+    
+    // Store only the last 5 locations to save space
+    const locationsToSave = lastLocations.slice(-5);
+    await AsyncStorage.setItem(LAST_LOCATIONS_KEY, JSON.stringify(locationsToSave));
+  } catch (error) {
+    console.error('Error saving detection state:', error);
+  }
+};
+
+// Function to check if we should notify about a potential trip start
+const shouldNotifyTripStart = async (currentSpeed: number): Promise<boolean> => {
+  if (currentSpeed < TRIP_START_SPEED_THRESHOLD) return false;
+  
+  // Check if trip detection is enabled
+  const tripDetectionEnabled = await AsyncStorage.getItem(TRIP_DETECTION_ENABLED_KEY);
+  if (tripDetectionEnabled !== 'true') return false;
+  
+  // Check if a trip is already active
+  const tripActiveStr = await AsyncStorage.getItem(TRIP_ACTIVE_KEY);
+  if (tripActiveStr === 'true') return false;
+  
+  // Check when we last sent a notification (don't spam notifications)
+  const lastNotificationTime = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
+  if (lastNotificationTime) {
+    const lastTime = parseInt(lastNotificationTime, 10);
+    const now = Date.now();
+    // Don't send another notification if it's been less than 2 minutes
+    if (now - lastTime < 2 * 60 * 1000) return false;
+  }
+  
+  return true;
+};
 
 TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
   if (error) {
     console.error('Location tracking task error:', error);
     return;
   }
-  if (data) {
-    const { locations } = data as { locations: Location.LocationObject[] };
-    // Process the locations data
-    console.log('Received background location update:', locations);
+  if (!data) return;
+
+  const { locations } = data as { locations: Location.LocationObject[] };
+  if (!locations || locations.length === 0) return;
+
+  // Get the most recent location
+  const latestLocation = locations[locations.length - 1];
+  const currentSpeed = msToKmh(latestLocation.coords.speed);
+
+  console.log('Background location update received:', {
+    latitude: latestLocation.coords.latitude,
+    longitude: latestLocation.coords.longitude,
+    speed: currentSpeed,
+    timestamp: new Date(latestLocation.timestamp).toISOString()
+  });
+
+
+  try {
+    // Check if trip detection is enabled
+    const tripDetectionEnabled = await AsyncStorage.getItem(TRIP_DETECTION_ENABLED_KEY);
+    if (tripDetectionEnabled !== 'true') {
+      console.log('Trip detection is disabled');
+      return;
+    }
+    // Get current trip status
+    const tripActiveStr = await AsyncStorage.getItem(TRIP_ACTIVE_KEY);
+    const tripActive = tripActiveStr === 'true';
+
+    // ---------- TRIP START DETECTION ----------
+    if (!tripActive) {
+      // Check if speed exceeds threshold for trip start
+      if (await shouldNotifyTripStart(currentSpeed)) {
+        console.log('Trip potentially starting - sending notification');
+        await sendTripDetectionNotification();
+        
+        // Save last notification time
+        await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
+      }
+    } 
+    // ---------- TRIP END DETECTION ----------
+    else {
+      // Get stored low speed start time
+      const lowSpeedStartTimeStr = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);
+      let lowSpeedStartTime = lowSpeedStartTimeStr ? parseInt(lowSpeedStartTimeStr, 10) : null;
+      
+      if (currentSpeed < TRIP_END_SPEED_THRESHOLD) {
+        // Begin or continue tracking low speed duration
+        if (lowSpeedStartTime === null) {
+          lowSpeedStartTime = latestLocation.timestamp;
+          await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, lowSpeedStartTime.toString());
+          console.log('Below speed threshold - starting end timer');
+        } else if (latestLocation.timestamp - lowSpeedStartTime > TRIP_END_DURATION_THRESHOLD) {
+          // Trip has ended due to low speed for extended period
+          console.log('Trip potentially ended - sending end notification');
+          
+          // We can't directly end the trip here since we need user confirmation,
+          // but we can send a notification that the app will handle
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Trip May Have Ended',
+              body: 'It seems your trip has ended. Open the app to confirm and save trip details.',
+              data: { type: 'trip_end_detection' },
+            },
+            trigger: null, // Send immediately
+          });
+          
+          // Reset low speed timer
+          await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+        }
+      } else {
+        // Speed increased above threshold, reset low speed timer
+        if (lowSpeedStartTime !== null) {
+          console.log('Speed increased - resetting end timer');
+          await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+        }
+      }
+    }
+    // Always save latest locations for context
+    const existingLocationsStr = await AsyncStorage.getItem(LAST_LOCATIONS_KEY);
+    let existingLocations = [];
+    if (existingLocationsStr) {
+      try {
+        existingLocations = JSON.parse(existingLocationsStr);
+      } catch (e) {
+        console.error('Error parsing stored locations:', e);
+      }
+    }
     
-    // This is where you would implement background trip detection logic
-    // For example, you might send another notification
+    const updatedLocations = [...existingLocations, ...locations].slice(-20); // Keep last 20 locations
+    await AsyncStorage.setItem(LAST_LOCATIONS_KEY, JSON.stringify(updatedLocations));
+    
+  } catch (error) {
+    console.error('Error in background location task:', error);
   }
 });
