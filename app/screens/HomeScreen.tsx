@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { useTrip, TransportMode } from '../context/TripContext';
+import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
-// this is just for test the notification functionality.
-// import { sendTripDetectionNotification } from '../context/notificationService';
+import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const {
@@ -17,15 +17,20 @@ export default function HomeScreen() {
     endTrip,
     selectTransportMode,
     showTransportModal,
-    setShowTransportModal
+    setShowTransportModal,
+    tripHistory,
+    loadTripHistory
   } = useTrip();
 
-  // const [showTransportModal, setShowTransportModal] = useState(false);
+  const { user, logout } = useAuth();
+  const router = useRouter();
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [isLogoutModalVisible, setIsLogoutModalVisible] = useState(false);
   
-  // Start trip detection when component loads
+  // Start trip detection when component loads and load trip history
   useEffect(() => {
     startTripDetection();
+    loadTripHistory();
     
     return () => {
       stopTripDetection();
@@ -68,20 +73,46 @@ export default function HomeScreen() {
     setShowTransportModal(false);
   };
   
+  // Calculate total carbon footprint from trip history
+  const getTotalCarbonFootprint = () => {
+    return tripHistory.reduce((total, trip) => total + (trip.carbonEmissions || 0), 0);
+  };
+  
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      // End any active trip first
+      if (trip?.isActive) {
+        await endTrip();
+      }
+      await logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+      Alert.alert('Error', 'Failed to log out. Please try again.');
+    }
+  };
+  
   return (
     <View className="flex-1 bg-white">
       {/* Header */}
       <View className="bg-primary-500 pt-12 pb-6 px-4">
         <View className="flex-row justify-between items-center">
           <Text className="text-white text-2xl font-bold">CarbOnTrack</Text>
-          <TouchableOpacity>
-            <Ionicons name="settings-outline" size={24} color="white" />
+          <TouchableOpacity onPress={() => setIsLogoutModalVisible(true)}>
+            <Ionicons name="menu-outline" size={24} color="white" />
           </TouchableOpacity>
         </View>
+        
+        {/* User Info */}
+        {user && (
+          <View className="mt-2">
+            <Text className="text-white opacity-80">Hello, {user.displayName || 'User'}</Text>
+          </View>
+        )}
       </View>
       
       {/* Main Content */}
-      <View className="flex-1 px-4 py-6">
+      <ScrollView className="flex-1 px-4 py-6">
         {/* Trip Status Card */}
         <View className="bg-white rounded-xl shadow-md p-5 mb-6">
           <Text className="text-lg font-semibold mb-2">
@@ -175,7 +206,33 @@ export default function HomeScreen() {
           </View>
         </View>
         
-        {/* Status Information */}
+        {/* Total Carbon Footprint Card */}
+        <View className="bg-white rounded-xl shadow-md p-5 mb-6">
+          <Text className="text-lg font-semibold mb-3">Carbon Footprint Summary</Text>
+          
+          <View className="flex-row items-center bg-green-50 p-4 rounded-lg mb-4">
+            <Ionicons name="leaf-outline" size={36} color="#059669" />
+            <View className="ml-3">
+              <Text className="text-green-800">Total Carbon Emissions</Text>
+              <Text className="text-3xl font-bold text-green-800">
+                {getTotalCarbonFootprint().toFixed(2)} kg CO₂
+              </Text>
+            </View>
+          </View>
+          
+          <TouchableOpacity
+            className="flex-row items-center justify-between p-3 bg-gray-100 rounded-lg"
+            onPress={() => router.push('./screens/TripHistoryScreen')}
+          >
+            <View className="flex-row items-center">
+              <Ionicons name="time-outline" size={24} color="#666" />
+              <Text className="text-base ml-2">View Trip History</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+        
+        {/* How It Works Card */}
         <View className="bg-white rounded-xl shadow-md p-5">
           <Text className="text-lg font-semibold mb-2">How It Works</Text>
           <Text className="text-gray-700 mb-2">
@@ -184,7 +241,6 @@ export default function HomeScreen() {
           <Text className="text-gray-700 mb-2">
             • Select your transport mode to calculate emissions
           </Text>
-          {/* ADD THIS NEW LINE */}
           <Text className="text-gray-700 mb-2">
             • You'll receive a notification when a trip is detected
           </Text>
@@ -192,7 +248,7 @@ export default function HomeScreen() {
             • Trip automatically ends after 3 minutes of being stationary
           </Text>
         </View>
-      </View>
+      </ScrollView>
       
       {/* Transport Mode Selection Modal */}
       <Modal
@@ -229,6 +285,48 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Logout Modal */}
+      <Modal
+        visible={isLogoutModalVisible}
+        animationType="fade"
+        transparent={true}
+      >
+        <View className="flex-1 justify-center items-center bg-black bg-opacity-50">
+          <View className="bg-white rounded-xl p-5 w-4/5">
+            <Text className="text-xl font-bold mb-4">Menu</Text>
+            
+            <TouchableOpacity 
+              className="flex-row items-center p-4 border-b border-gray-200"
+              onPress={() => {
+                setIsLogoutModalVisible(false);
+                router.push('./screens/TripHistoryScreen');
+              }}
+            >
+              <Ionicons name="time-outline" size={24} color="#005eff" />
+              <Text className="text-lg ml-3">Trip History</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              className="flex-row items-center p-4"
+              onPress={() => {
+                setIsLogoutModalVisible(false);
+                handleLogout();
+              }}
+            >
+              <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+              <Text className="text-lg ml-3 text-red-500">Logout</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              className="mt-4 p-3 bg-gray-100 rounded-lg items-center"
+              onPress={() => setIsLogoutModalVisible(false)}
+            >
+              <Text className="font-medium">Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

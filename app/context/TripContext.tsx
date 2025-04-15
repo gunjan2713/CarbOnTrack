@@ -5,6 +5,8 @@ import * as Notifications from 'expo-notifications';
 import { sendTripDetectionNotification, registerForPushNotificationsAsync } from './notificationService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as TaskManager from 'expo-task-manager';
+import { useAuth } from './AuthContext';
+import { saveTrip, getUserTrips } from '../services/TripService';
 
 // Define TypeScript interfaces
 export interface LocationPoint {
@@ -47,6 +49,9 @@ interface TripContextType {
   calculateEmissions: () => number;
   showTransportModal: boolean;
   setShowTransportModal: (show: boolean) => void;
+  tripHistory: Trip[];                       //  Array of past trips
+  loadTripHistory: () => Promise<void>;      //  Function to load trips
+  isLoadingHistory: boolean;                 //  Loading state
 }
 
 // Define available transport modes for now but we can integrate the LLM api later to recognize the transport model from user input.
@@ -85,6 +90,11 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [showTransportModal, setShowTransportModal] = useState<boolean>(false);
   const notificationListener = useRef<Notifications.Subscription>();
   const responseListener = useRef<Notifications.Subscription>();
+  const [tripHistory, setTripHistory] = useState<Trip[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+
+
+  const { user } = useAuth();  // Get the current authenticated user
 
   // Set up notification listeners
   useEffect(() => {
@@ -117,10 +127,30 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Load trip history when user changes
+  useEffect(() => {
+    if (user) {
+      loadTripHistory();
+    } else {
+      setTripHistory([]);
+    }
+  }, [user]);
 
-
-
-
+  // Load trip history from Firestore
+  const loadTripHistory = async () => {
+    if (!user) return;
+    
+    try {
+      setIsLoadingHistory(true);
+      const trips = await getUserTrips(user.uid);
+      setTripHistory(trips);
+    } catch (error) {
+      console.error('Error loading trip history:', error);
+      Alert.alert('Error', 'Failed to load trip history');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   // Request location permissions
   const requestLocationPermissions = async () => {
@@ -335,14 +365,15 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // End the current trip
   const endTrip = async () => {
-    if (!trip || !currentLocation) return;
+    if (!trip || !currentLocation || !user) return;
 
+    const emissions = calculateEmissions();
     const updatedTrip: Trip = {
       ...trip,
       endTime: new Date(),
       endLocation: currentLocation,
       isActive: false,
-      carbonEmissions: calculateEmissions(),
+      carbonEmissions: emissions,
     };
 
     // Update storage to reflect trip is no longer active
@@ -356,12 +387,27 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log('Trip ended:', updatedTrip);
 
     // Alert the user with trip summary
-    Alert.alert(
-      'Trip Summary',
-      `Distance: ${updatedTrip.distance.toFixed(2)} km\nCarbon: ${
-        updatedTrip.carbonEmissions?.toFixed(2) || '0'
-      } kg CO₂`
-    );
+    try {
+      // Save trip to Firestore
+      await saveTrip(user.uid, updatedTrip);
+      
+      // Refresh trip history
+      await loadTripHistory();
+      
+      // Alert the user with trip summary
+      Alert.alert(
+        'Trip Summary',
+        `Distance: ${updatedTrip.distance.toFixed(2)} km\nCarbon: ${
+          emissions.toFixed(2)
+        } kg CO₂`
+      );
+    } catch (error) {
+      console.error('Error saving trip:', error);
+      Alert.alert(
+        'Error Saving Trip',
+        'There was a problem saving your trip data. Please try again.'
+      );
+    }
   };
 
   // Select transport mode for current trip
@@ -436,6 +482,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     calculateEmissions,
     showTransportModal,
     setShowTransportModal,
+    tripHistory,           
+    loadTripHistory,       
+    isLoadingHistory       
   };
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;
