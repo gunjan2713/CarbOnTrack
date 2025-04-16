@@ -29,7 +29,11 @@ export default function LoginScreen() {
     try {
       setIsLoading(true);
       await login(email, password);
-      router.replace('/home');
+      // router.replace('/home');
+      setTimeout(() => {
+        console.log("Login successful, manually navigating to home");
+        router.replace('/home');
+      }, 500);
     } catch (error: any) {
       Alert.alert('Login Failed', error.message || 'Please check your credentials and try again');
     } finally {

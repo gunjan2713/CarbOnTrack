@@ -40,6 +40,8 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
       } else {
         await AsyncStorage.removeItem('userId');
       }
+      // for testing
+      setLoading(false);
     });
 
     // Cleanup subscription

@@ -309,6 +309,17 @@ export default function HomeScreen() {
               <Ionicons name="time-outline" size={24} color="#005eff" />
               <Text className="text-lg ml-3">Trip History</Text>
             </TouchableOpacity>
+            {/* Add Profile option here */}
+            <TouchableOpacity 
+              className="flex-row items-center p-4 border-b border-gray-200"
+              onPress={() => {
+                setIsLogoutModalVisible(false);
+                router.push('/screens/ProfileScreen');
+              }}
+            >
+              <Ionicons name="person-outline" size={24} color="#005eff" />
+              <Text className="text-lg ml-3">Profile</Text>
+            </TouchableOpacity>
             
             <TouchableOpacity 
               className="flex-row items-center p-4"

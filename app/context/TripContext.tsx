@@ -227,11 +227,17 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       locationSubscription.remove();
       setLocationSubscription(null);
     }
+    // for debugging and 
+    const isTaskDefined = await TaskManager.isTaskDefined('trip-tracking');
 
     // Store that trip detection is disabled
     await AsyncStorage.setItem(TRIP_DETECTION_ENABLED_KEY, 'false');
 
-    await Location.stopLocationUpdatesAsync('trip-tracking').catch(console.error);
+    if (isTaskDefined) {
+      await Location.stopLocationUpdatesAsync('trip-tracking').catch(console.error);
+    }
+
+    //await Location.stopLocationUpdatesAsync('trip-tracking').catch(console.error);
     setIsDetectingTrip(false);
   };
 
