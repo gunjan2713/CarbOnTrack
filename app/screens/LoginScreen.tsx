@@ -94,7 +94,7 @@ export default function LoginScreen() {
           {/* Register Link */}
           <View className="flex-row justify-center">
             <Text className="text-gray-600">Don't have an account? </Text>
-            <TouchableOpacity onPress={() => router.push('./register')}>
+            <TouchableOpacity onPress={() => router.push('./RegisterScreen')}>
               <Text className="text-primary-600 font-semibold">Register</Text>
             </TouchableOpacity>
           </View>

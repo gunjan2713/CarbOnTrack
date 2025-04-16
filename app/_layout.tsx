@@ -20,6 +20,7 @@ function LoadingScreen() {
 // Layout with authentication flow
 function RootLayoutNav() {
   const { user, loading } = useAuth();
+  console.log("Auth state:", { user: user?.email, loading });
 
   // Show loading screen while determining auth state
   if (loading) {

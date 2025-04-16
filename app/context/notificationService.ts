@@ -62,6 +62,14 @@ export async function sendTripDetectionNotification() {
 export function isTripDetectionNotification(notification: Notifications.Notification | null | undefined) {
   return notification?.request?.content?.data?.type === 'trip_detection';
 }
+
+const notificationService = {
+  registerForPushNotificationsAsync,
+  sendTripDetectionNotification,
+  isTripDetectionNotification
+};
+
+export default notificationService;
 // ===============================================================
 
 // import * as Notifications from 'expo-notifications';

@@ -8,7 +8,7 @@ import {
   updateProfile
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, firestore } from '../../firebase';
+import { auth, firestore } from '@/firebase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface AuthContextType {
@@ -30,6 +30,7 @@ export const AuthProvider: React.FC<{children: React.ReactNode}> = ({ children }
   useEffect(() => {
     // Listen for authentication state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("Auth state changed:", user?.email || "not logged in"); // for debugging
       setUser(user);
       setLoading(false);
       
@@ -115,3 +116,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+export default AuthProvider;

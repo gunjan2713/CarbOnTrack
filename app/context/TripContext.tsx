@@ -654,3 +654,5 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     console.error('Error in background location task:', error);
   }
 });
+
+export default TripProvider;

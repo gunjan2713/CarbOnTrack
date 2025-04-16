@@ -135,3 +135,12 @@ import {
       throw error;
     }
   };
+
+  const TripService = {
+    saveTrip,
+    getUserTrips,
+    getTripsInDateRange,
+    getUserCarbonStats
+  };
+  
+  export default TripService;
