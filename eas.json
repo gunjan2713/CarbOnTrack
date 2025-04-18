@@ -1,0 +1,35 @@
+{
+  "cli": {
+    "version": ">= 16.3.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "FIREBASE_API_KEY": "AIzaSyBdHG0-Q1NF8Wgthh4qda_nQfJnyrASocQ"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "resourceClass": "m-medium"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "ios":{
+        "resourceClass": "m-medium"
+      }
+
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

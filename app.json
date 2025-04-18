@@ -10,17 +10,18 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "useFrameworks": "static",
+      "bundleIdentifier": "com.anonymous.CarbOnTrack",
       "infoPlist": {
         "UIBackgroundModes": [
-          "location",
-          "fetch",
           "location",
           "fetch"
         ],
         "NSLocationWhenInUseUsageDescription": "We need your location to detect and track your trips for carbon footprint calculation.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need to access your location in the background to automatically detect trips even when the app is not open."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need to access your location in the background to automatically detect trips even when the app is not open.",
+        "ITSAppUsesNonExemptEncryption": false
       },
-      "bundleIdentifier": "com.anonymous.CarbOnTrack"
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -35,7 +36,8 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
       ],
-      "package": "com.anonymous.CarbOnTrack"
+      "package": "com.anonymous.CarbOnTrack",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -43,6 +45,17 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      [
+        "expo-build-properties",
+        {
+          "ios":{
+            "useFrameworks": "static"
+          }
+        }
+
+      ],
       "expo-router",
       [
         "expo-location",
@@ -69,6 +82,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "1dd2a177-e31b-43ee-94d6-30c6ba2f9134"
+      }
+    },
+    "owner": "harsh7525"
   }
 }

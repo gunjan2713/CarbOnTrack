@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "767260395342",
+    "project_id": "carbontrack-96fe6",
+    "storage_bucket": "carbontrack-96fe6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:767260395342:android:12fb4a09579ce15d95801f",
+        "android_client_info": {
+          "package_name": "com.anonymous.CarbOnTrack"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "767260395342-2ma8955t2s4k2o9uc5be7760njr0esjs.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDmvsfTr8cTOoximjohgsP_TggjQ7ewn4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "767260395342-2ma8955t2s4k2o9uc5be7760njr0esjs.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
