@@ -67,10 +67,10 @@ const TRANSPORT_MODES: TransportMode[] = [
 ];
 
 // Speed thresholds
-const TRIP_START_SPEED_THRESHOLD = 20; // km/h
-const TRIP_END_SPEED_THRESHOLD = 5; // km/h
-const TRIP_END_DURATION_THRESHOLD = 3 * 60 * 1000; // 3 minutes in milliseconds
-const AUTO_END_SPEED_THRESHOLD = 3; // km/h - automatically end trip below this speed
+const TRIP_START_SPEED_THRESHOLD = 2; // km/h (20)
+const TRIP_END_SPEED_THRESHOLD = 0.5; // km/h (5)
+const TRIP_END_DURATION_THRESHOLD = 1 * 60 * 1000; // 3 minutes in milliseconds
+const AUTO_END_SPEED_THRESHOLD = 0; // km/h - automatically end trip below this speed (3)
 
 // Storage keys
 const LAST_LOCATIONS_KEY = 'carbontrack:lastLocations';
