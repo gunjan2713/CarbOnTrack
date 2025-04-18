@@ -1,4 +1,7 @@
-// __tests__/__mocks__/TripContext.mocks.ts
+
+import { Alert } from 'react-native';
+import { Trip, LocationPoint, TransportMode } from '../../app/context/TripContext';
+
 export function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   if (lat1 === lat2 && lon1 === lon2) return 0;
   const R = 6371;
@@ -52,3 +55,45 @@ export function selectTransportMode(trip: any, mode: any): any {
     carbonEmissions: trip.distance * mode.emissionFactor
   };
 }
+
+export const endTrip = ({
+  trip,
+  currentLocation,
+  user,
+  calculateEmissions,
+  saveTrip,
+  loadTripHistory,
+  setTrip,
+  setLowSpeedStartTime,
+}: {
+  trip: Trip,
+  currentLocation: LocationPoint,
+  user: { uid: string },
+  calculateEmissions: () => number,
+  saveTrip: (uid: string, trip: Trip) => Promise<void>,
+  loadTripHistory: () => Promise<void>,
+  setTrip: (trip: Trip | null) => void,
+  setLowSpeedStartTime: (val: number | null) => void,
+}) => {
+  return async () => {
+    const emissions = calculateEmissions();
+    const updatedTrip: Trip = {
+      ...trip,
+      endTime: new Date(),
+      endLocation: currentLocation,
+      isActive: false,
+      carbonEmissions: emissions,
+    };
+
+    await saveTrip(user.uid, updatedTrip);
+    await loadTripHistory();
+
+    setTrip(null);
+    setLowSpeedStartTime(null);
+
+    Alert.alert(
+      'Trip Summary',
+      `Distance: ${updatedTrip.distance.toFixed(2)} km\nCarbon: ${emissions.toFixed(2)} kg CO₂`
+    );
+  };
+};
