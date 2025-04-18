@@ -67,10 +67,9 @@ const TRANSPORT_MODES: TransportMode[] = [
 ];
 
 // Speed thresholds
-const TRIP_START_SPEED_THRESHOLD = 2; // km/h (20)
-const TRIP_END_SPEED_THRESHOLD = 0.5; // km/h (5)
-const TRIP_END_DURATION_THRESHOLD = 1 * 60 * 1000; // 3 minutes in milliseconds
-const AUTO_END_SPEED_THRESHOLD = 0; // km/h - automatically end trip below this speed (3)
+const TRIP_START_SPEED_THRESHOLD = 20; // km/h
+const TRIP_END_SPEED_THRESHOLD = 5; // km/h
+const TRIP_END_DURATION_THRESHOLD = 60 * 1000; // 1 minute in milliseconds
 
 // Storage keys
 const LAST_LOCATIONS_KEY = 'carbontrack:lastLocations';
@@ -79,6 +78,7 @@ const LOW_SPEED_START_TIME_KEY = 'carbontrack:lowSpeedStartTime';
 const TRIP_DETECTION_ENABLED_KEY = 'carbontrack:tripDetectionEnabled';
 const CURRENT_LOCATION_KEY = 'carbontrack:currentLocation';
 const TRIP_DATA_KEY = 'carbontrack:currentTripData';
+const LAST_END_NOTIFICATION_TIME_KEY = 'carbontrack:lastEndNotificationTime';
 
 // Background task name
 const LOCATION_TRACKING = 'trip-tracking';
@@ -117,9 +117,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const saveTripToStorage = async (tripData: Trip) => {
     try {
       await AsyncStorage.setItem(TRIP_DATA_KEY, JSON.stringify(tripData));
-      console.log(`Saved trip to storage with distance: ${tripData.distance.toFixed(4)} km`);
+      console.log(`DEBUG: Saved trip to storage with distance: ${tripData.distance.toFixed(4)} km`);
     } catch (error) {
-      console.error('Error saving trip to storage:', error);
+      console.error('DEBUG: Error saving trip to storage:', error);
     }
   };
 
@@ -134,11 +134,11 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (tripData.endTime) {
           tripData.endTime = new Date(tripData.endTime);
         }
-        console.log(`Loaded trip from storage with distance: ${tripData.distance.toFixed(4)} km`);
+        console.log(`DEBUG: Loaded trip from storage with distance: ${tripData.distance.toFixed(4)} km`);
         return tripData;
       }
     } catch (error) {
-      console.error('Error loading trip from storage:', error);
+      console.error('DEBUG: Error loading trip from storage:', error);
     }
     return null;
   };
@@ -147,9 +147,41 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearTripStorage = async () => {
     try {
       await AsyncStorage.removeItem(TRIP_DATA_KEY);
-      console.log('Cleared trip data from storage');
+      console.log('DEBUG: Cleared trip data from storage');
     } catch (error) {
-      console.error('Error clearing trip storage:', error);
+      console.error('DEBUG: Error clearing trip storage:', error);
+    }
+  };
+
+  // Load low speed start time from storage
+  const loadLowSpeedStartTime = async () => {
+    try {
+      const timeStr = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);
+      if (timeStr) {
+        const time = parseInt(timeStr, 10);
+        console.log(`DEBUG: Loaded low speed start time from storage: ${new Date(time).toISOString()}`);
+        setLowSpeedStartTime(time);
+        return time;
+      }
+    } catch (error) {
+      console.error('DEBUG: Error loading low speed start time:', error);
+    }
+    return null;
+  };
+
+  // Set low speed start time and save to storage
+  const setAndSaveLowSpeedStartTime = async (time: number | null) => {
+    setLowSpeedStartTime(time);
+    try {
+      if (time === null) {
+        await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+        console.log('DEBUG: Cleared low speed start time');
+      } else {
+        await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, time.toString());
+        console.log(`DEBUG: Saved low speed start time: ${new Date(time).toISOString()}`);
+      }
+    } catch (error) {
+      console.error('DEBUG: Error saving low speed start time:', error);
     }
   };
 
@@ -158,7 +190,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Create a timer that periodically updates the UI during active trips
     const refreshInterval = setInterval(async () => {
       if (trip?.isActive) {
-        console.log("Running periodic UI refresh");
+        console.log("DEBUG: Running periodic UI refresh");
         
         // Get the last stored location from AsyncStorage
         try {
@@ -171,7 +203,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 storedLocation.timestamp > 0 && 
                 (!currentLocation || storedLocation.timestamp > currentLocation.timestamp)) {
               
-              console.log(`UI Refresh - New location: ${storedLocation.latitude.toFixed(5)}, ${storedLocation.longitude.toFixed(5)}, Speed: ${storedLocation.speed.toFixed(2)} km/h`);
+              console.log(`DEBUG: UI Refresh - New location: ${storedLocation.latitude.toFixed(5)}, ${storedLocation.longitude.toFixed(5)}, Speed: ${storedLocation.speed.toFixed(2)} km/h`);
               
               // Update current location state to refresh UI
               setCurrentLocation(storedLocation);
@@ -180,8 +212,12 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
               handleActiveTripUpdate(storedLocation);
             }
           }
+          
+          // Also check if there's a stored low speed start time
+          await loadLowSpeedStartTime();
+          
         } catch (error) {
-          console.error("Error during UI refresh:", error);
+          console.error("DEBUG: Error during UI refresh:", error);
         }
       }
     }, 2000); // Refresh every 2 seconds during active trips
@@ -204,11 +240,14 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             const storedLocation = JSON.parse(storedLocationStr) as LocationPoint;
             setCurrentLocation(storedLocation);
-            console.log('Restored stored location:', storedLocation);
+            console.log('DEBUG: Restored stored location:', storedLocation);
           } catch (e) {
-            console.error('Failed to parse stored location:', e);
+            console.error('DEBUG: Failed to parse stored location:', e);
           }
         }
+        
+        // Load low speed timer state
+        await loadLowSpeedStartTime();
         
         // Restart trip detection if it was enabled
         if (detectionEnabled === 'true') {
@@ -226,7 +265,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
       } catch (error) {
-        console.error('Error initializing location tracking:', error);
+        console.error('DEBUG: Error initializing location tracking:', error);
       }
     };
     
@@ -236,16 +275,32 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     registerForPushNotificationsAsync();
     
     notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('Notification received:', notification);
+      console.log('DEBUG: Notification received:', notification);
     });
     
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notification response received:', response);
+      console.log('DEBUG: Notification response received:', response);
       const data = response.notification.request.content.data;
       
       if (data?.type === 'trip_detection') {
         startTrip();
         setShowTransportModal(true);
+      } else if (data?.type === 'trip_end_suggestion' && trip?.isActive) {
+        // If user taps on the trip end suggestion notification
+        Alert.alert(
+          'End Trip?',
+          'Would you like to end and save your current trip?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'End Trip',
+              onPress: () => endTrip(),
+            },
+          ]
+        );
       }
     });
     
@@ -282,7 +337,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (currentLocation) {
       AsyncStorage.setItem(CURRENT_LOCATION_KEY, JSON.stringify(currentLocation))
-        .catch(err => console.error('Error storing location:', err));
+        .catch(err => console.error('DEBUG: Error storing location:', err));
     }
   }, [currentLocation]);
 
@@ -295,7 +350,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const trips = await getUserTrips(user.uid);
       setTripHistory(trips);
     } catch (error) {
-      console.error('Error loading trip history:', error);
+      console.error('DEBUG: Error loading trip history:', error);
       Alert.alert('Error', 'Failed to load trip history');
     } finally {
       setIsLoadingHistory(false);
@@ -326,8 +381,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
-    // Convert m/s to km/h
-    let speed = location.coords.speed ? location.coords.speed * 3.6 : 0;
+    // Convert m/s to km/h and ensure it's positive
+    let speed = location.coords.speed ? Math.abs(location.coords.speed * 3.6) : 0;
     
     // Create location point
     const locationPoint: LocationPoint = {
@@ -343,7 +398,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentLocation(locationPoint);
       lastLocationUpdateTime.current = now;
       
-      console.log(`Location update: ${locationPoint.latitude.toFixed(5)}, ${locationPoint.longitude.toFixed(5)}, Speed: ${speed.toFixed(2)} km/h`);
+      console.log(`DEBUG: Location update: ${locationPoint.latitude.toFixed(5)}, ${locationPoint.longitude.toFixed(5)}, Speed: ${speed.toFixed(2)} km/h`);
     }
 
     // Trip detection logic
@@ -371,20 +426,68 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return R * c;
   };
 
+  // Check if the trip should end based on speed
+  const checkForTripEnd = async (location: LocationPoint) => {
+    // Get the stored low speed start time to ensure consistency
+    const storedLowSpeedTime = await loadLowSpeedStartTime();
+    const currentLowSpeedTime = storedLowSpeedTime !== null ? storedLowSpeedTime : lowSpeedStartTime;
+    
+    if (location.speed < TRIP_END_SPEED_THRESHOLD) {
+      if (currentLowSpeedTime === null) {
+        // Start counting time below threshold - use current time instead of location timestamp
+        const timestamp = Date.now();
+        console.log(`DEBUG: Speed below threshold (${location.speed.toFixed(2)} km/h), starting end timer at ${new Date(timestamp).toISOString()}`);
+        await setAndSaveLowSpeedStartTime(timestamp);
+      } else {
+        // Calculate time elapsed using current time instead of location timestamp
+        const now = Date.now();
+        // Add debug logs to understand the time calculations
+        console.log(`DEBUG: Current time: ${now}, Low speed start time: ${currentLowSpeedTime}, Delta: ${now - currentLowSpeedTime}ms`);
+        
+        const timeElapsed = now - currentLowSpeedTime;
+        
+        // Check that timeElapsed is reasonable (not negative or too large)
+        if (timeElapsed < 0 || timeElapsed > 3600000) { // If more than an hour, something's wrong
+          console.log(`DEBUG: Suspicious time elapsed value: ${timeElapsed}ms - resetting timer`);
+          await setAndSaveLowSpeedStartTime(now);
+          return false;
+        }
+        
+        console.log(`DEBUG: Low speed timer running: ${(timeElapsed/1000).toFixed(0)} seconds elapsed of ${(TRIP_END_DURATION_THRESHOLD/1000).toFixed(0)} seconds required`);
+        
+        if (timeElapsed > TRIP_END_DURATION_THRESHOLD) {
+          // Below threshold for longer than duration threshold
+          console.log('DEBUG: Speed below threshold for extended period, prompting trip end');
+          console.log(`DEBUG: Time elapsed: ${(timeElapsed/1000).toFixed(0)} seconds`);
+          await handlePotentialTripEnd();
+          return true;
+        }
+      }
+    } else {
+      // Reset low speed timer if speed increases
+      if (currentLowSpeedTime !== null) {
+        console.log(`DEBUG: Speed increased to ${location.speed.toFixed(2)} km/h, resetting end timer`);
+        await setAndSaveLowSpeedStartTime(null);
+      }
+    }
+    
+    return false;
+  };
+
   // Handle updates for an active trip with fixed distance calculation
   const handleActiveTripUpdate = async (location: LocationPoint) => {
     if (!trip) {
-      console.log("No active trip to update");
+      console.log("DEBUG: No active trip to update");
       return;
     }
 
-    console.log("Processing active trip update");
+    console.log("DEBUG: Processing active trip update");
     
     // IMPORTANT: Load latest trip data from storage to ensure we have the most accurate distance
     let currentTrip = trip;
     const storedTrip = await loadTripFromStorage();
     if (storedTrip && storedTrip.id === trip.id && storedTrip.distance > trip.distance) {
-      console.log(`Using stored trip data with higher distance: ${storedTrip.distance.toFixed(4)} km vs ${trip.distance.toFixed(4)} km`);
+      console.log(`DEBUG: Using stored trip data with higher distance: ${storedTrip.distance.toFixed(4)} km vs ${trip.distance.toFixed(4)} km`);
       currentTrip = storedTrip;
       // Update state with the loaded trip data (don't await)
       setTrip(storedTrip);
@@ -395,18 +498,22 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (lastLocation && 
         lastLocation.latitude === location.latitude && 
         lastLocation.longitude === location.longitude) {
-      console.log("Skipping identical location");
+      console.log("DEBUG: Skipping identical location");
+      
+      // Still check for end trip condition even if location is identical
+      await checkForTripEnd(location);
+      
       return;
     }
 
     // Validate timestamp - ignore if earlier than the trip start or last location
     if (location.timestamp < currentTrip.startTime.getTime()) {
-      console.log(`Invalid timestamp: location is earlier than trip start`);
+      console.log(`DEBUG: Invalid timestamp: location is earlier than trip start`);
       return;
     }
     
     if (lastLocation && location.timestamp < lastLocation.timestamp) {
-      console.log(`Invalid timestamp: new location time is earlier than previous`);
+      console.log(`DEBUG: Invalid timestamp: new location time is earlier than previous`);
       return;
     }
 
@@ -425,36 +532,19 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Sanity check - ignore jumps over 1km
       if (distanceIncrement > 1) {
-        console.log(`Suspiciously large distance increment: ${distanceIncrement.toFixed(4)} km - filtered out`);
+        console.log(`DEBUG: Suspiciously large distance increment: ${distanceIncrement.toFixed(4)} km - filtered out`);
         distanceIncrement = 0;
       } else {
-        console.log(`Distance increment: ${distanceIncrement.toFixed(6)} km`);
+        console.log(`DEBUG: Distance increment: ${distanceIncrement.toFixed(6)} km`);
       }
     }
     
     // Update total distance (using the current trip's distance as base)
     const newDistance = currentTrip.distance + distanceIncrement;
-    console.log(`Previous distance: ${currentTrip.distance.toFixed(4)} km, New distance: ${newDistance.toFixed(4)} km`);
+    console.log(`DEBUG: Previous distance: ${currentTrip.distance.toFixed(4)} km, New distance: ${newDistance.toFixed(4)} km`);
     
     // Check for trip end conditions
-    if (location.speed < TRIP_END_SPEED_THRESHOLD) {
-      if (lowSpeedStartTime === null) {
-        // Start counting time below threshold
-        setLowSpeedStartTime(location.timestamp);
-        console.log(`Speed below threshold (${location.speed.toFixed(2)} km/h), starting end timer`);
-      } else if (location.timestamp - lowSpeedStartTime > TRIP_END_DURATION_THRESHOLD) {
-        // Below threshold for longer than duration threshold
-        console.log('Speed below threshold for extended period, prompting trip end');
-        handlePotentialTripEnd();
-        return;
-      }
-    } else {
-      // Reset low speed timer if speed increases
-      if (lowSpeedStartTime !== null) {
-        console.log(`Speed increased to ${location.speed.toFixed(2)} km/h, resetting end timer`);
-        setLowSpeedStartTime(null);
-      }
-    }
+    await checkForTripEnd(location);
 
     // Update trip with new information
     const updatedTrip = {
@@ -495,9 +585,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (isTaskDefined) {
         try {
           await Location.stopLocationUpdatesAsync(LOCATION_TRACKING);
-          console.log('Successfully stopped previous background location task');
+          console.log('DEBUG: Successfully stopped previous background location task');
         } catch (error) {
-          console.log('No active background task to stop', error);
+          console.log('DEBUG: No active background task to stop', error);
         }
       }
       
@@ -514,7 +604,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
       });
       
-      console.log('Background location task started');
+      console.log('DEBUG: Background location task started');
       
       // Set up foreground location subscription for more immediate updates
       const subscription = await Location.watchPositionAsync(
@@ -529,9 +619,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       
       setLocationSubscription(subscription);
-      console.log('Foreground location tracking started');
+      console.log('DEBUG: Foreground location tracking started');
     } catch (error) {
-      console.error('Error setting up location tracking:', error);
+      console.error('DEBUG: Error setting up location tracking:', error);
       Alert.alert('Error', 'Failed to start location tracking. Please try again.');
       setIsDetectingTrip(false);
     }
@@ -550,10 +640,10 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isTaskDefined = await TaskManager.isTaskDefined(LOCATION_TRACKING);
       if (isTaskDefined) {
         await Location.stopLocationUpdatesAsync(LOCATION_TRACKING);
-        console.log('Background location task stopped');
+        console.log('DEBUG: Background location task stopped');
       }
     } catch (error) {
-      console.error('Error stopping location updates:', error);
+      console.error('DEBUG: Error stopping location updates:', error);
     }
     
     setIsDetectingTrip(false);
@@ -574,40 +664,62 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     await sendTripDetectionNotification();
     await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
-    console.log('Trip detection notification sent');
+    console.log('DEBUG: Trip detection notification sent');
   };
 
   // Handle potential trip end
-  const handlePotentialTripEnd = () => {
-    if (!trip || !currentLocation) return;
-
-    Alert.alert(
-      'Trip Ended?',
-      'It looks like your trip has ended. Would you like to save it?',
-      [
-        {
-          text: 'No, still traveling',
-          onPress: () => setLowSpeedStartTime(null),
-          style: 'cancel',
+  const handlePotentialTripEnd = async () => {
+    if (!trip || !currentLocation) {
+      console.log("DEBUG: Cannot end trip: No active trip or current location");
+      return;
+    }
+    
+    // Check if we've recently sent an end notification to avoid duplicates
+    const lastEndNotificationTime = await AsyncStorage.getItem(LAST_END_NOTIFICATION_TIME_KEY);
+    if (lastEndNotificationTime) {
+      const lastTime = parseInt(lastEndNotificationTime, 10);
+      const now = Date.now();
+      // Don't send another end notification if it's been less than 2 minutes
+      if (now - lastTime < 120 * 1000) {
+        console.log('DEBUG: Skipping end notification - one was sent recently');
+        return;
+      }
+    }
+    
+    console.log('DEBUG: Sending trip end notification');
+    
+    try {
+      // Send notification instead of showing alert
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Trip End Detected',
+          body: `It looks like you've stopped. Would you like to end your trip? Distance: ${trip.distance.toFixed(2)} km`,
+          data: { type: 'trip_end_suggestion' },
         },
-        {
-          text: 'Yes, end trip',
-          onPress: () => endTrip(),
-        },
-      ]
-    );
+        trigger: null, // Send immediately
+      });
+      console.log('DEBUG: Trip end notification sent successfully');
+      
+      // Store the time we sent this notification
+      await AsyncStorage.setItem(LAST_END_NOTIFICATION_TIME_KEY, Date.now().toString());
+      
+      // Reset low speed timer to prevent multiple notifications
+      await setAndSaveLowSpeedStartTime(null);
+    } catch (error) {
+      console.error('DEBUG: Failed to send trip end notification:', error);
+    }
   };
 
   // Start a new trip with proper data validation
   const startTrip = async () => {
-    console.log("Starting trip - BEGIN");
+    console.log("DEBUG: Starting trip - BEGIN");
     // Get the latest location directly from AsyncStorage to ensure we have the most recent data
     let validLocation: LocationPoint | null = null;
     
     try {
       // Try to get the most recent location from AsyncStorage first
       const storedLocationStr = await AsyncStorage.getItem(CURRENT_LOCATION_KEY);
-      console.log("Retrieved from storage:", storedLocationStr || "No stored location");
+      console.log("DEBUG: Retrieved from storage:", storedLocationStr || "No stored location");
       
       if (storedLocationStr) {
         try {
@@ -618,17 +730,17 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
               storedLocation.timestamp > 0 &&
               storedLocation.speed >= 0) {
             
-            console.log(`Using stored location: ${storedLocation.latitude.toFixed(5)}, ${storedLocation.longitude.toFixed(5)}, Speed: ${storedLocation.speed.toFixed(2)} km/h`);
+            console.log(`DEBUG: Using stored location: ${storedLocation.latitude.toFixed(5)}, ${storedLocation.longitude.toFixed(5)}, Speed: ${storedLocation.speed.toFixed(2)} km/h`);
             validLocation = storedLocation;
           } else {
-            console.log("Stored location failed validation:", storedLocation);
+            console.log("DEBUG: Stored location failed validation:", storedLocation);
           }
         } catch (error) {
-          console.error("Failed to parse stored location:", error);
+          console.error("DEBUG: Failed to parse stored location:", error);
         }
       }
     } catch (error) {
-      console.error("Error retrieving stored location:", error);
+      console.error("DEBUG: Error retrieving stored location:", error);
     }
     
     // If we couldn't get a valid location from storage, try to use the current state
@@ -637,17 +749,17 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
           currentLocation.timestamp > 0 &&
           currentLocation.speed >= 0) {
         
-        console.log(`Using current state location: ${currentLocation.latitude.toFixed(5)}, ${currentLocation.longitude.toFixed(5)}, Speed: ${currentLocation.speed.toFixed(2)} km/h`);
+        console.log(`DEBUG: Using current state location: ${currentLocation.latitude.toFixed(5)}, ${currentLocation.longitude.toFixed(5)}, Speed: ${currentLocation.speed.toFixed(2)} km/h`);
         validLocation = currentLocation;
       } else {
-        console.log("Current location failed validation:", currentLocation);
+        console.log("DEBUG: Current location failed validation:", currentLocation);
       }
     }
     
     // If we still don't have a valid location, try to get a fresh one
     if (!validLocation) {
       try {
-        console.log("Getting fresh location from Location API");
+        console.log("DEBUG: Getting fresh location from Location API");
         const freshLocation = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.BestForNavigation
         });
@@ -662,10 +774,10 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
             speed: speed
           };
           
-          console.log(`Using fresh location: ${validLocation.latitude.toFixed(5)}, ${validLocation.longitude.toFixed(5)}, Speed: ${validLocation.speed.toFixed(2)} km/h`);
+          console.log(`DEBUG: Using fresh location: ${validLocation.latitude.toFixed(5)}, ${validLocation.longitude.toFixed(5)}, Speed: ${validLocation.speed.toFixed(2)} km/h`);
         }
       } catch (error) {
-        console.error("Failed to get fresh location:", error);
+        console.error("DEBUG: Failed to get fresh location:", error);
       }
     }
     
@@ -675,13 +787,13 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'Location Not Available', 
         'Unable to start trip without a valid location. Please ensure location services are enabled.'
       );
-      console.log("Starting trip - FAILED due to no valid location");
+      console.log("DEBUG: Starting trip - FAILED due to no valid location");
       return;
     }
 
     // We have a valid location, create the trip
     await createNewTrip(validLocation);
-    console.log("Starting trip - SUCCESS");
+    console.log("DEBUG: Starting trip - SUCCESS");
   };
 
   // Helper function to create a new trip
@@ -713,6 +825,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Store trip active state for background task
     await AsyncStorage.setItem(TRIP_ACTIVE_KEY, 'true');
     await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+    await AsyncStorage.removeItem(LAST_END_NOTIFICATION_TIME_KEY);
 
     // Store the current location to ensure it's the same one we're using
     await AsyncStorage.setItem(CURRENT_LOCATION_KEY, JSON.stringify(normalizedLocation));
@@ -722,9 +835,9 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // Update the state
     setTrip(newTrip);
-    setLowSpeedStartTime(null);
+    await setAndSaveLowSpeedStartTime(null);
     
-    console.log('Trip started:', {
+    console.log('DEBUG: Trip started:', {
       id: newTrip.id,
       location: `${normalizedLocation.latitude.toFixed(5)}, ${normalizedLocation.longitude.toFixed(5)}`,
       speed: `${normalizedLocation.speed.toFixed(2)} km/h`,
@@ -737,6 +850,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // End the current trip
   const endTrip = async () => {
+    console.log('DEBUG: Trip ending - triggered by user action'); // Debug log to indicate user-initiated trip end
+    
     if (!trip || !currentLocation || !user) return;
 
     const emissions = calculateEmissions();
@@ -751,14 +866,15 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Update storage to reflect trip is no longer active
     await AsyncStorage.setItem(TRIP_ACTIVE_KEY, 'false');
     await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+    await AsyncStorage.removeItem(LAST_END_NOTIFICATION_TIME_KEY);
     
     // Clear trip data from storage
     await clearTripStorage();
 
     setTrip(null); // Clear the trip to ensure a clean state
-    setLowSpeedStartTime(null);
+    await setAndSaveLowSpeedStartTime(null);
     
-    console.log('Trip ended at:', currentLocation);
+    console.log('DEBUG: Trip ended at:', currentLocation);
 
     try {
       // Save trip to Firestore
@@ -775,7 +891,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } kg CO₂`
       );
     } catch (error) {
-      console.error('Error saving trip:', error);
+      console.error('DEBUG: Error saving trip:', error);
       Alert.alert(
         'Error Saving Trip',
         'There was a problem saving your trip data. Please try again.'
@@ -814,7 +930,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Try to stop the background task
       Location.stopLocationUpdatesAsync(LOCATION_TRACKING).catch(error => {
-        console.log('Error stopping background location task on unmount:', error);
+        console.log('DEBUG: Error stopping background location task on unmount:', error);
       });
     };
   }, []);
@@ -852,7 +968,7 @@ export const useTrip = () => {
 // Define the background task for location tracking
 TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
   if (error) {
-    console.error('Location tracking task error:', error);
+    console.error('DEBUG: Location tracking task error:', error);
     return;
   }
   if (!data) return;
@@ -870,8 +986,8 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
       return;
     }
     
-    // Calculate speed - convert m/s to km/h
-    let currentSpeed = latestLocation.coords.speed ? latestLocation.coords.speed * 3.6 : 0;
+    // Calculate speed - convert m/s to km/h and ensure it's positive
+    let currentSpeed = latestLocation.coords.speed ? Math.abs(latestLocation.coords.speed * 3.6) : 0;
     
     // Store the current location for future calculations
     const locationPoint: LocationPoint = {
@@ -883,7 +999,7 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     
     await AsyncStorage.setItem(CURRENT_LOCATION_KEY, JSON.stringify(locationPoint));
     
-    console.log(`[Background] Location: ${locationPoint.latitude.toFixed(5)}, ${locationPoint.longitude.toFixed(5)}, Speed: ${currentSpeed.toFixed(2)} km/h`);
+    console.log(`DEBUG: [Background] Location: ${locationPoint.latitude.toFixed(5)}, ${locationPoint.longitude.toFixed(5)}, Speed: ${currentSpeed.toFixed(2)} km/h`);
     
     // Get current trip status
     const tripActiveStr = await AsyncStorage.getItem(TRIP_ACTIVE_KEY);
@@ -897,7 +1013,7 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
         (Date.now() - parseInt(lastNotificationTime, 10)) > 60 * 1000; // 1 minute
       
       if (canNotify) {
-        console.log('[Background] Trip potentially starting - sending notification');
+        console.log('DEBUG: [Background] Trip potentially starting - sending notification');
         await sendTripDetectionNotification();
         await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
       }
@@ -909,28 +1025,70 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
       
       if (currentSpeed < TRIP_END_SPEED_THRESHOLD) {
         if (lowSpeedStartTime === null) {
-          lowSpeedStartTime = latestLocation.timestamp;
+          // Use current time instead of location timestamp
+          lowSpeedStartTime = Date.now();
           await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, lowSpeedStartTime.toString());
-          console.log('[Background] Below speed threshold - starting end timer');
-        } else if (latestLocation.timestamp - lowSpeedStartTime > TRIP_END_DURATION_THRESHOLD) {
-          console.log('[Background] Trip potentially ended - sending end notification');
+          console.log('DEBUG: [Background] Below speed threshold - starting end timer');
+        } else {
+          // Calculate using current time
+          const now = Date.now();
+          const timeElapsed = now - lowSpeedStartTime;
           
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: 'Trip May Have Ended',
-              body: 'It seems your trip has ended. Open the app to confirm and save trip details.',
-              data: { type: 'trip_end_detection' },
-            },
-            trigger: null, // Send immediately
-          });
+          // Validate the time elapsed
+          if (timeElapsed < 0 || timeElapsed > 3600000) { // If negative or > 1 hour
+            console.log(`DEBUG: [Background] Invalid time elapsed: ${timeElapsed}ms - resetting timer`);
+            lowSpeedStartTime = now;
+            await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, lowSpeedStartTime.toString());
+            return;
+          }
           
-          // Reset low speed timer
-          await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+          console.log(`DEBUG: [Background] Low speed timer: ${(timeElapsed/1000).toFixed(0)} seconds elapsed of ${(TRIP_END_DURATION_THRESHOLD/1000).toFixed(0)} required`);
+          
+          if (timeElapsed > TRIP_END_DURATION_THRESHOLD) {
+            console.log('DEBUG: [Background] Trip potentially ended - sending end notification');
+            console.log(`DEBUG: [Background] Time elapsed: ${(timeElapsed/1000).toFixed(0)} seconds`);
+            
+            // Check if we've recently sent an end notification
+            const lastEndNotificationTime = await AsyncStorage.getItem(LAST_END_NOTIFICATION_TIME_KEY);
+            let canSendNotification = true;
+            
+            if (lastEndNotificationTime) {
+              const lastTime = parseInt(lastEndNotificationTime, 10);
+              const now = Date.now();
+              // Don't send another end notification if it's been less than 2 minutes
+              if (now - lastTime < 120 * 1000) {
+                console.log('DEBUG: [Background] Skipping end notification - one was sent recently');
+                canSendNotification = false;
+              }
+            }
+            
+            if (canSendNotification) {
+              try {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: 'Trip End Detected',
+                    body: "It looks like you've stopped. Would you like to end your trip?",
+                    data: { type: 'trip_end_suggestion' },
+                  },
+                  trigger: null, // Send immediately
+                });
+                console.log('DEBUG: [Background] Trip end notification sent successfully');
+                
+                // Store the time we sent this notification
+                await AsyncStorage.setItem(LAST_END_NOTIFICATION_TIME_KEY, Date.now().toString());
+                
+                // Reset low speed timer
+                await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+              } catch (error) {
+                console.error('DEBUG: [Background] Failed to send trip end notification:', error);
+              }
+            }
+          }
         }
       } else {
         // Speed increased above threshold, reset low speed timer
         if (lowSpeedStartTime !== null) {
-          console.log('[Background] Speed increased - resetting end timer');
+          console.log('DEBUG: [Background] Speed increased - resetting end timer');
           await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
         }
       }
@@ -943,7 +1101,7 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
       try {
         existingLocations = JSON.parse(existingLocationsStr);
       } catch (e) {
-        console.error('Error parsing stored locations:', e);
+        console.error('DEBUG: Error parsing stored locations:', e);
       }
     }
     
@@ -951,7 +1109,7 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     await AsyncStorage.setItem(LAST_LOCATIONS_KEY, JSON.stringify(updatedLocations));
     
   } catch (error) {
-    console.error('Error in background location task:', error);
+    console.error('DEBUG: Error in background location task:', error);
   }
 });
 
