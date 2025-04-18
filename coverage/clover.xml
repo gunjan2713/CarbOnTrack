@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1744985876694" clover="3.2.0">
+  <project timestamp="1744985876694" name="All files">
+    <metrics statements="16" coveredstatements="16" conditionals="17" coveredconditionals="17" methods="6" coveredmethods="6" elements="39" coveredelements="39" complexity="0" loc="16" ncloc="16" packages="1" files="1" classes="1"/>
+    <file name="TripContext.mocks.ts" path="/Users/gunjan/Desktop/SWE/CarbOnTrack/Tests/Mocks/TripContext.mocks.ts">
+      <metrics statements="16" coveredstatements="16" conditionals="17" coveredconditionals="17" methods="6" coveredmethods="6"/>
+      <line num="3" count="3" type="cond" truecount="4" falsecount="0"/>
+      <line num="4" count="2" type="stmt"/>
+      <line num="5" count="2" type="stmt"/>
+      <line num="6" count="2" type="stmt"/>
+      <line num="7" count="2" type="stmt"/>
+      <line num="10" count="2" type="stmt"/>
+      <line num="11" count="2" type="stmt"/>
+      <line num="15" count="4" type="cond" truecount="7" falsecount="0"/>
+      <line num="22" count="3" type="cond" truecount="4" falsecount="0"/>
+      <line num="23" count="1" type="stmt"/>
+      <line num="27" count="2" type="stmt"/>
+      <line num="28" count="2" type="stmt"/>
+      <line num="39" count="1" type="stmt"/>
+      <line num="40" count="1" type="stmt"/>
+      <line num="41" count="1" type="stmt"/>
+      <line num="49" count="1" type="stmt"/>
+    </file>
+  </project>
+</coverage>

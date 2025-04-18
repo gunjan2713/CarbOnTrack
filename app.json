@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "CarbOnTrack",
-    "slug": "CarbOnTrack",
+    "slug": "carbontrack",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -50,11 +50,10 @@
       [
         "expo-build-properties",
         {
-          "ios":{
+          "ios": {
             "useFrameworks": "static"
           }
         }
-
       ],
       "expo-router",
       [
@@ -88,9 +87,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "1dd2a177-e31b-43ee-94d6-30c6ba2f9134"
+        "projectId": "680f0498-5fd1-40bc-8c26-85d32193db3c"
       }
     },
-    "owner": "harsh7525"
+    "owner": "gg2713"
   }
 }
