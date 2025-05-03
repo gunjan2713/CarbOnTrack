@@ -5,14 +5,18 @@ import {
   FlatList, 
   TouchableOpacity, 
   ActivityIndicator, 
-  RefreshControl 
+  RefreshControl,
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTrip, Trip } from '../context/TripContext';
 import { useRouter } from 'expo-router';
 import { format } from 'date-fns';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
-// Trip Card Component
+// Trip Card Component (same as before)
+
 const TripCard = ({ trip }: { trip: Trip }) => {
   const formattedDate = format(new Date(trip.startTime), 'MMM d, yyyy');
   const formattedTime = format(new Date(trip.startTime), 'h:mm a');
@@ -20,7 +24,6 @@ const TripCard = ({ trip }: { trip: Trip }) => {
     ? ((new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / (1000 * 60))
     : 0;
 
-  
   return (
     <View className="bg-white rounded-xl shadow-sm p-4 mb-3">
       <View className="flex-row justify-between items-center mb-2">
@@ -42,7 +45,6 @@ const TripCard = ({ trip }: { trip: Trip }) => {
         <View>
           <Text className="text-gray-500 text-sm">Duration</Text>
           <Text className="font-bold">{duration.toFixed(1)} min</Text>
-
         </View>
         
         <View>
@@ -61,6 +63,36 @@ export default function TripHistoryScreen() {
   useEffect(() => {
     loadTripHistory();
   }, []);
+
+  const generateCSV = () => {
+    const header = "Date,Time,Transport Mode,Distance (km),Duration (min),Carbon Emissions (kg)\n";
+    const rows = tripHistory.map(trip => {
+      const date = format(new Date(trip.startTime), 'MMM d, yyyy');
+      const time = format(new Date(trip.startTime), 'h:mm a');
+      const mode = trip.transportMode?.name || 'Unknown';
+      const distance = trip.distance.toFixed(2);
+      const duration = trip.endTime 
+        ? ((new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / (1000 * 60)).toFixed(1)
+        : '0';
+      const carbon = (trip.carbonEmissions || 0).toFixed(2);
+      return `${date},${time},${mode},${distance},${duration},${carbon}`;
+    });
+
+    return header + rows.join("\n");
+  };
+
+  const downloadReport = async () => {
+    try {
+      const csv = generateCSV();
+      const fileName = FileSystem.documentDirectory + `trip-history-${Date.now()}.csv`;
+      await FileSystem.writeAsStringAsync(fileName, csv, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      await Sharing.shareAsync(fileName);
+    } catch (error) {
+      Alert.alert("Error", "Could not download the report.");
+    }
+  };
 
   const renderEmptyList = () => (
     <View className="flex-1 justify-center items-center py-10">
@@ -81,7 +113,9 @@ export default function TripHistoryScreen() {
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <Text className="text-white text-xl font-bold">Trip History</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity onPress={downloadReport}>
+            <Ionicons name="download-outline" size={24} color="white" />
+          </TouchableOpacity>
         </View>
       </View>
 

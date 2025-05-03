@@ -222,7 +222,8 @@ export default function HomeScreen() {
           
           <TouchableOpacity
             className="flex-row items-center justify-between p-3 bg-gray-100 rounded-lg"
-            onPress={() => router.push('./screens/TripHistoryScreen')}
+            onPress={() => router.push('/(tabs)/TripHistoryScreen')
+            }
           >
             <View className="flex-row items-center">
               <Ionicons name="time-outline" size={24} color="#666" />
@@ -303,7 +304,8 @@ export default function HomeScreen() {
               className="flex-row items-center p-4 border-b border-gray-200"
               onPress={() => {
                 setIsLogoutModalVisible(false);
-                router.push('./screens/TripHistoryScreen');
+                router.push('/(tabs)/TripHistoryScreen');
+
               }}
             >
               <Ionicons name="time-outline" size={24} color="#005eff" />
@@ -314,7 +316,7 @@ export default function HomeScreen() {
               className="flex-row items-center p-4 border-b border-gray-200"
               onPress={() => {
                 setIsLogoutModalVisible(false);
-                router.push('/screens/ProfileScreen');
+                router.push('/(tabs)/ProfileScreen');
               }}
             >
               <Ionicons name="person-outline" size={24} color="#005eff" />
