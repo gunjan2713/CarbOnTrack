@@ -17,8 +17,9 @@ const TripCard = ({ trip }: { trip: Trip }) => {
   const formattedDate = format(new Date(trip.startTime), 'MMM d, yyyy');
   const formattedTime = format(new Date(trip.startTime), 'h:mm a');
   const duration = trip.endTime 
-    ? Math.floor((new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / (1000 * 60))
+    ? ((new Date(trip.endTime).getTime() - new Date(trip.startTime).getTime()) / (1000 * 60))
     : 0;
+
   
   return (
     <View className="bg-white rounded-xl shadow-sm p-4 mb-3">
@@ -40,7 +41,8 @@ const TripCard = ({ trip }: { trip: Trip }) => {
         
         <View>
           <Text className="text-gray-500 text-sm">Duration</Text>
-          <Text className="font-bold">{duration} min</Text>
+          <Text className="font-bold">{duration.toFixed(1)} min</Text>
+
         </View>
         
         <View>

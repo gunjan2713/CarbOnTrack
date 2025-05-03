@@ -1,25 +1,43 @@
-import { Stack } from "expo-router";
+// import { Stack } from "expo-router";
+// import { TripProvider } from "./context/TripContext";
+// import { AuthProvider } from "./context/AuthContext";
+// import "./global.css";
+
+// export default function RootLayout() {
+//   return (
+//     <AuthProvider>
+//       <TripProvider>
+//         <Stack screenOptions={{ headerShown: false }}>
+//           {/* List ALL possible screens here, regardless of auth state */}
+//           <Stack.Screen name="index" />
+//           <Stack.Screen name="home" />
+//           <Stack.Screen name="screens/LoginScreen" />
+//           <Stack.Screen name="screens/RegisterScreen" />
+//           <Stack.Screen name="screens/TripHistoryScreen" />
+//           <Stack.Screen name="screens/ProfileScreen" />
+//           <Stack.Screen name="screens/VisualisationScreen" />
+
+//         </Stack>
+//       </TripProvider>
+//     </AuthProvider>
+//   );
+// }
+
+import { Slot } from "expo-router";
 import { TripProvider } from "./context/TripContext";
 import { AuthProvider } from "./context/AuthContext";
-import "./global.css";
+import "./global.css"; // Tailwind styles
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <TripProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* List ALL possible screens here, regardless of auth state */}
-          <Stack.Screen name="index" />
-          <Stack.Screen name="home" />
-          <Stack.Screen name="screens/LoginScreen" />
-          <Stack.Screen name="screens/RegisterScreen" />
-          <Stack.Screen name="screens/TripHistoryScreen" />
-          <Stack.Screen name="screens/ProfileScreen" />
-        </Stack>
+        <Slot /> {/* Automatically loads tab layout, login, register, etc */}
       </TripProvider>
     </AuthProvider>
   );
 }
+
 
 // import { Stack } from "expo-router";
 // import { TripProvider } from "./context/TripContext";
