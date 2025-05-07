@@ -1,4 +1,3 @@
-// __tests__/TripContext.test.ts
 import {
   calculateDistance,
   isValidCoordinate,
