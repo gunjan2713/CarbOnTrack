@@ -26,18 +26,20 @@
 import { Slot } from "expo-router";
 import { TripProvider } from "./context/TripContext";
 import { AuthProvider } from "./context/AuthContext";
+import { NotificationProvider } from "./context/NotificationContext";
 import "./global.css"; // Tailwind styles
 
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <TripProvider>
-        <Slot /> {/* Automatically loads tab layout, login, register, etc */}
-      </TripProvider>
+      <NotificationProvider>
+        <TripProvider>
+          <Slot />
+        </TripProvider>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
-
 
 // import { Stack } from "expo-router";
 // import { TripProvider } from "./context/TripContext";
