@@ -27,14 +27,37 @@ import { Slot } from "expo-router";
 import { TripProvider } from "./context/TripContext";
 import { AuthProvider } from "./context/AuthContext";
 import { NotificationProvider } from "./context/NotificationContext";
+import InAppNotification from "./InAppNotification";
+import { useNotification } from "./context/NotificationContext";
 import "./global.css"; // Tailwind styles
+
+// Create a wrapper component that uses the context
+function NotificationWrapper() {
+  const { notification } = useNotification();
+  
+  return (
+    <>
+      <InAppNotification 
+        visible={notification.visible}
+        title={notification.title}
+        message={notification.message}
+        type={notification.type}
+        icon={notification.icon}
+        duration={notification.duration}
+        onPress={notification.onPress}
+        onDismiss={() => {}}
+      />
+      <Slot />
+    </>
+  );
+}
 
 export default function RootLayout() {
   return (
     <AuthProvider>
       <NotificationProvider>
         <TripProvider>
-          <Slot />
+          <NotificationWrapper />
         </TripProvider>
       </NotificationProvider>
     </AuthProvider>

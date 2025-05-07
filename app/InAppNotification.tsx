@@ -103,9 +103,12 @@ const InAppNotification: React.FC<NotificationProps> = ({
     if (visible) {
       showNotification();
     } else {
-      dismissNotification();
+      // Only dismiss if currently visible
+      if (currentValue > -100) {
+        dismissNotification();
+      }
     }
-
+  
     // Clean up timeout on unmount
     return () => {
       if (timeout.current) {

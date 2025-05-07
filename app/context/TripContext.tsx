@@ -663,23 +663,41 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsDetectingTrip(false);
   };
 
-  // Handle potential trip start based on speed
-  const handlePotentialTripStart = async (location: LocationPoint) => {
-    // Don't trigger notifications too frequently
-    const lastNotificationTime = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
-    if (lastNotificationTime) {
-      const lastTime = parseInt(lastNotificationTime, 10);
-      const now = Date.now();
-      // Don't send another notification if it's been less than 1 minute
-      if (now - lastTime < 60 * 1000) {
-        return;
+  /// In TripContext.tsx, update the handlePotentialTripStart function
+const handlePotentialTripStart = async (location: LocationPoint) => {
+  // Don't trigger notifications too frequently
+  const lastNotificationTime = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
+  if (lastNotificationTime) {
+    const lastTime = parseInt(lastNotificationTime, 10);
+    const now = Date.now();
+    // Reduce throttling time for testing (from 60 seconds to 10 seconds)
+    if (now - lastTime < 10 * 1000) {
+      console.log('DEBUG: Notification throttled - last notification was too recent');
+      return;
+    }
+  }
+
+  // Log when notifications are being sent
+  console.log('DEBUG: Showing speed notification for speed:', location.speed);
+
+  await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
+  
+  // Your existing code to show notification
+  showNotification({
+    title: 'Trip Activity Detected',
+    message: `Current speed: ${location.speed.toFixed(1)} km/h`,
+    type: 'info',
+    icon: 'car',
+    duration: 5000,
+    onPress: () => {
+      // If no active trip, start one when user taps notification
+      if (!trip?.isActive) {
+        startTrip();
+        setShowTransportModal(true);
       }
     }
-    
-
-    await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
-    console.log('DEBUG: Trip detection notification sent');
-  };
+  });
+}
 
   // Handle potential trip end
   const handlePotentialTripEnd = async () => {

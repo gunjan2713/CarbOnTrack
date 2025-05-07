@@ -62,7 +62,10 @@ export const NotificationProvider: React.FC<{children: React.ReactNode}> = ({ ch
 
   // Hide notification
   const hideNotification = () => {
-    setNotification(prev => ({ ...prev, visible: false }));
+    setNotification(prev => ({ 
+      ...defaultNotification,
+      visible: false 
+    }));
   };
 
   return (
