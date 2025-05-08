@@ -16,6 +16,7 @@ export interface LocationPoint {
   speed: number; // in km/h
 }
 
+
 export interface TransportMode {
   id: string;
   name: string;
