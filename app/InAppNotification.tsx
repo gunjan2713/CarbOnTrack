@@ -18,8 +18,8 @@ interface NotificationProps {
   duration?: number;
   onPress?: () => void;
   onDismiss?: () => void;
+  id?: number; // Add this
 }
-
 const { width } = Dimensions.get('window');
 
 const InAppNotification: React.FC<NotificationProps> = ({

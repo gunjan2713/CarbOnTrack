@@ -38,6 +38,7 @@ function NotificationWrapper() {
   return (
     <>
       <InAppNotification 
+        key={notification.id} // Add this key prop
         visible={notification.visible}
         title={notification.title}
         message={notification.message}
@@ -51,7 +52,6 @@ function NotificationWrapper() {
     </>
   );
 }
-
 export default function RootLayout() {
   return (
     <AuthProvider>

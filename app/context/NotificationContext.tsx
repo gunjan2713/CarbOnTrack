@@ -11,6 +11,7 @@ export interface NotificationData {
   icon?: string;
   duration?: number;
   onPress?: () => void;
+  id?: number; // Add an ID to track different notifications
 }
 
 // Default notification state
@@ -19,7 +20,8 @@ const defaultNotification: NotificationData = {
   title: '',
   message: '',
   type: 'info',
-  duration: 3000
+  duration: 3000,
+  id: 0
 };
 
 interface NotificationContextType {
@@ -35,6 +37,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export const NotificationProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [notification, setNotification] = useState<NotificationData>(defaultNotification);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const notificationIdRef = useRef(0); // Counter for notifications
 
   // Show notification
   const showNotification = (data: Partial<NotificationData>) => {
@@ -44,11 +47,15 @@ export const NotificationProvider: React.FC<{children: React.ReactNode}> = ({ ch
       timeoutRef.current = null;
     }
 
-    // Set notification data
+    // Increment the ID to ensure React sees this as a new notification
+    notificationIdRef.current += 1;
+
+    // Set notification data with new ID
     setNotification({
       ...defaultNotification,
       ...data,
-      visible: true
+      visible: true,
+      id: notificationIdRef.current
     });
 
     // Auto hide after duration if provided
@@ -62,10 +69,7 @@ export const NotificationProvider: React.FC<{children: React.ReactNode}> = ({ ch
 
   // Hide notification
   const hideNotification = () => {
-    setNotification(prev => ({ 
-      ...defaultNotification,
-      visible: false 
-    }));
+    setNotification(prev => ({ ...prev, visible: false }));
   };
 
   return (
@@ -84,5 +88,4 @@ export const useNotification = () => {
   return context;
 };
 
-// Add this default export to fix the error
 export default NotificationContext;

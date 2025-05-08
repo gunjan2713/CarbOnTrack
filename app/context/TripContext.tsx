@@ -100,6 +100,8 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const notificationListener = useRef<Notifications.Subscription>();
   const responseListener = useRef<Notifications.Subscription>();
   const lastLocationUpdateTime = useRef<number>(0);
+  const [lastNotificationTime, setLastNotificationTime] = useState<number>(0);
+
 
   const { user } = useAuth();
 
@@ -273,18 +275,22 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
 
     
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-      console.log('DEBUG: Notification received:', notification);
-    });
-    
     responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('DEBUG: Notification response received:', response);
-      const data = response.notification.request.content.data;
-      
-      if (data?.type === 'trip_detection') {
-        startTrip();
-        setShowTransportModal(true);
-      } else if (data?.type === 'trip_end_suggestion' && trip?.isActive) {
+  console.log('DEBUG: Notification response received:', response);
+  const data = response.notification.request.content.data;
+  
+  if (data?.type === 'trip_detection') {
+    console.log('DEBUG: Trip detection notification tapped, starting trip...');
+    startTrip();
+    // Important: Make sure this modal shows up
+    setShowTransportModal(true);
+    
+    // Add a slight delay to ensure the modal appears after navigation
+    setTimeout(() => {
+      console.log('DEBUG: Ensuring transport modal is visible');
+      setShowTransportModal(true);
+    }, 500);
+  } else if (data?.type === 'trip_end_suggestion' && trip?.isActive) {
         // If user taps on the trip end suggestion notification
         Alert.alert(
           'End Trip?',
@@ -374,57 +380,165 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Process location update
-  const processLocationUpdate = (location: Location.LocationObject) => {
+  // In TripContext.tsx, replace the processLocationUpdate function with this version:
+
+// Replace the entire processLocationUpdate function with this version
+
+  const processLocationUpdate = async (location: Location.LocationObject) => {
     // Ignore null locations
     if (!location || !location.coords) {
       return;
     }
     
-    /// Convert m/s to km/h and ensure it's positive
-  let speed = location.coords.speed ? Math.abs(location.coords.speed * 3.6) : 0;
-  
-  // Create location point
-  const locationPoint: LocationPoint = {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
-    timestamp: location.timestamp,
-    speed: speed,
-  };
-  
-  // Update current location regardless of other conditions
-  setCurrentLocation(locationPoint);
-  lastLocationUpdateTime.current = Date.now();
-  
-  // Speed threshold check - show notification when speed exceeds threshold
-  if (speed >= TRIP_START_SPEED_THRESHOLD) {
-    // Show in-app notification regardless of trip status
-    showNotification({
-      title: 'Trip Activity Detected',
-      message: `Current speed: ${speed.toFixed(1)} km/h`,
-      type: 'info',
-      icon: 'car',
-      duration: 5000,
-      onPress: () => {
-        // If no active trip, start one when user taps notification
-        if (!trip?.isActive) {
-          startTrip();
-          setShowTransportModal(true);
+    // Convert m/s to km/h and ensure it's positive
+    let speed = location.coords.speed ? Math.abs(location.coords.speed * 3.6) : 0;
+    
+    // Create location point
+    const locationPoint: LocationPoint = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      timestamp: location.timestamp,
+      speed: speed,
+    };
+    
+    // Update current location regardless of other conditions
+    setCurrentLocation(locationPoint);
+    lastLocationUpdateTime.current = Date.now();
+    
+    // Log speed for debugging
+    console.log(`DEBUG: Current speed: ${speed.toFixed(2)} km/h, Threshold: ${TRIP_START_SPEED_THRESHOLD} km/h, Trip active: ${trip?.isActive ? 'YES' : 'NO'}`);
+    
+    // Always check if trip is active first
+    const tripActiveStatus = await AsyncStorage.getItem(TRIP_ACTIVE_KEY);
+    const isCurrentlyActive = tripActiveStatus === 'true' || trip?.isActive;
+    
+    // Handle active trip case with custom end trip notification
+    if (isCurrentlyActive) {
+      // First do all the regular trip updates (keep this function call)
+      handleActiveTripUpdate(locationPoint);
+      
+      // Then handle trip end detection separately
+      if (speed < TRIP_END_SPEED_THRESHOLD) {
+        // Get current low speed start time
+        const lowSpeedStartTimeStr = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);
+        const now = Date.now();
+        
+        if (!lowSpeedStartTimeStr) {
+          // First time speed is below threshold, record the start time
+          console.log(`DEBUG: Speed below threshold (${speed.toFixed(2)} km/h), starting end timer`);
+          await AsyncStorage.setItem(LOW_SPEED_START_TIME_KEY, now.toString());
+          setLowSpeedStartTime(now);
+        } else {
+          // Already below threshold, check duration
+          const lowSpeedStartTime = parseInt(lowSpeedStartTimeStr, 10);
+          const timeElapsed = now - lowSpeedStartTime;
+          
+          // Use 10 seconds (10000ms) as requested
+          const END_THRESHOLD = 10000; // 10 seconds
+          
+          console.log(`DEBUG: LOW SPEED TIMER ACTIVE: ${(timeElapsed/1000).toFixed(1)} of ${END_THRESHOLD/1000} seconds`);
+          
+          if (timeElapsed >= END_THRESHOLD) {
+            // Time to show notification
+            console.log('DEBUG: END NOTIFICATION CONDITION MET - Speed below threshold for required time!');
+            
+            // Check if we've recently sent an end notification
+            const lastEndNotificationTimeStr = await AsyncStorage.getItem(LAST_END_NOTIFICATION_TIME_KEY);
+            let canSendNotification = true;
+            
+            if (lastEndNotificationTimeStr) {
+              const lastEndNotificationTime = parseInt(lastEndNotificationTimeStr, 10);
+              // Don't send another end notification if it's been less than 30 seconds
+              if (now - lastEndNotificationTime < 30000) {
+                console.log('DEBUG: End notification throttled - one was sent recently');
+                canSendNotification = false;
+              }
+            }
+            
+            if (canSendNotification) {
+              console.log('DEBUG: SENDING END TRIP NOTIFICATION NOW');
+              
+              // Store the notification time FIRST
+              await AsyncStorage.setItem(LAST_END_NOTIFICATION_TIME_KEY, now.toString());
+              
+              // Show notification
+              showNotification({
+                title: 'Trip End Detected',
+                message: `You've been stopped for ${(timeElapsed/1000).toFixed(0)} seconds. End trip?`,
+                type: 'success',
+                icon: 'flag',
+                duration: 8000,
+                onPress: () => endTrip()
+              });
+              
+              // Reset timer after showing notification
+              await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+              setLowSpeedStartTime(null);
+            }
+          }
+        }
+      } else {
+        // Speed above threshold, reset low speed timer if it was set
+        const hasLowSpeedTimer = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);
+        if (hasLowSpeedTimer) {
+          console.log(`DEBUG: Speed increased to ${speed.toFixed(2)} km/h, resetting end timer`);
+          await AsyncStorage.removeItem(LOW_SPEED_START_TIME_KEY);
+          setLowSpeedStartTime(null);
         }
       }
-    });
-    
-    // If no active trip, handle potential trip start
-    if (!trip?.isActive) {
-      handlePotentialTripStart(locationPoint);
+      
+      return;
     }
-  }
-
-  // Trip is already active, check for end conditions and calculate distance
-  if (trip?.isActive) {
-    handleActiveTripUpdate(locationPoint);
-  }
-};
-
+    
+    // Only handle start trip notifications if no trip is active
+    if (speed >= TRIP_START_SPEED_THRESHOLD) {
+      // Use AsyncStorage for notification throttling
+      try {
+        const lastNotificationTimeStr = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
+        const now = Date.now();
+        
+        let shouldNotify = true;
+        
+        if (lastNotificationTimeStr) {
+          const lastNotificationTimestamp = parseInt(lastNotificationTimeStr, 10);
+          const elapsedMs = now - lastNotificationTimestamp;
+          
+          // Only notify if it's been at least 30 seconds since the last notification
+          if (elapsedMs < 30000) {
+            console.log(`DEBUG: Notification throttled. Only ${(elapsedMs/1000).toFixed(1)}s elapsed of 30s required`);
+            shouldNotify = false;
+          }
+        }
+        
+        if (shouldNotify) {
+          console.log('DEBUG: Showing speed notification with 30s throttle:', speed.toFixed(1), 'km/h');
+          
+          // Set the last notification time in AsyncStorage FIRST
+          await AsyncStorage.setItem('carbontrack:lastNotificationTime', now.toString());
+          
+          // Then update the state
+          setLastNotificationTime(now);
+          
+          // And finally show the notification
+          showNotification({
+            title: 'Trip Activity Detected',
+            message: `Current speed: ${speed.toFixed(1)} km/h`,
+            type: 'info',
+            icon: 'car',
+            duration: 5000,
+            onPress: () => {
+              if (!trip?.isActive) {
+                startTrip();
+                setShowTransportModal(true);
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('DEBUG: Error handling notification throttling:', error);
+      }
+    }
+  };
   // Calculate distance between two points using Haversine formula
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     // If coordinates are identical, return 0
@@ -441,6 +555,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Check if the trip should end based on speed
+  // Check if the trip should end based on speed - but do NOT send notifications from here anymore
   const checkForTripEnd = async (location: LocationPoint) => {
     // Get the stored low speed start time to ensure consistency
     const storedLowSpeedTime = await loadLowSpeedStartTime();
@@ -450,45 +565,45 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentLowSpeedTime === null) {
         // Start counting time below threshold - use current time instead of location timestamp
         const timestamp = Date.now();
-        console.log(`DEBUG: Speed below threshold (${location.speed.toFixed(2)} km/h), starting end timer at ${new Date(timestamp).toISOString()}`);
+        console.log(`DEBUG: [Internal] Speed below threshold (${location.speed.toFixed(2)} km/h), starting end timer at ${new Date(timestamp).toISOString()}`);
         await setAndSaveLowSpeedStartTime(timestamp);
       } else {
         // Calculate time elapsed using current time instead of location timestamp
         const now = Date.now();
         // Add debug logs to understand the time calculations
-        console.log(`DEBUG: Current time: ${now}, Low speed start time: ${currentLowSpeedTime}, Delta: ${now - currentLowSpeedTime}ms`);
+        console.log(`DEBUG: [Internal] Current time: ${now}, Low speed start time: ${currentLowSpeedTime}, Delta: ${now - currentLowSpeedTime}ms`);
         
         const timeElapsed = now - currentLowSpeedTime;
         
         // Check that timeElapsed is reasonable (not negative or too large)
         if (timeElapsed < 0 || timeElapsed > 3600000) { // If more than an hour, something's wrong
-          console.log(`DEBUG: Suspicious time elapsed value: ${timeElapsed}ms - resetting timer`);
+          console.log(`DEBUG: [Internal] Suspicious time elapsed value: ${timeElapsed}ms - resetting timer`);
           await setAndSaveLowSpeedStartTime(now);
           return false;
         }
         
-        console.log(`DEBUG: Low speed timer running: ${(timeElapsed/1000).toFixed(0)} seconds elapsed of ${(TRIP_END_DURATION_THRESHOLD/1000).toFixed(0)} seconds required`);
+        console.log(`DEBUG: [Internal] Low speed timer running: ${(timeElapsed/1000).toFixed(0)} seconds elapsed of ${(TRIP_END_DURATION_THRESHOLD/1000).toFixed(0)} seconds required`);
         
-        if (timeElapsed > TRIP_END_DURATION_THRESHOLD) {
-          // Below threshold for longer than duration threshold
-          console.log('DEBUG: Speed below threshold for extended period, prompting trip end');
-          console.log(`DEBUG: Time elapsed: ${(timeElapsed/1000).toFixed(0)} seconds`);
-          await handlePotentialTripEnd();
+        // No longer send notifications from this function
+        // Just maintain timer state
+        if (timeElapsed > TRIP_END_DURATION_THRESHOLD) { 
+          console.log('DEBUG: [Internal] Speed below threshold for extended period (tracked by checkForTripEnd)');
           return true;
         }
       }
     } else {
       // Reset low speed timer if speed increases
       if (currentLowSpeedTime !== null) {
-        console.log(`DEBUG: Speed increased to ${location.speed.toFixed(2)} km/h, resetting end timer`);
+        console.log(`DEBUG: [Internal] Speed increased to ${location.speed.toFixed(2)} km/h, resetting end timer`);
         await setAndSaveLowSpeedStartTime(null);
       }
     }
-    
+        
     return false;
   };
-
+ 
   // Handle updates for an active trip with fixed distance calculation
+  // Modify your handleActiveTripUpdate function - remove the checkForTripEnd call
   const handleActiveTripUpdate = async (location: LocationPoint) => {
     if (!trip) {
       console.log("DEBUG: No active trip to update");
@@ -513,10 +628,6 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLocation.latitude === location.latitude && 
         lastLocation.longitude === location.longitude) {
       console.log("DEBUG: Skipping identical location");
-      
-      // Still check for end trip condition even if location is identical
-      await checkForTripEnd(location);
-      
       return;
     }
 
@@ -557,9 +668,6 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newDistance = currentTrip.distance + distanceIncrement;
     console.log(`DEBUG: Previous distance: ${currentTrip.distance.toFixed(4)} km, New distance: ${newDistance.toFixed(4)} km`);
     
-    // Check for trip end conditions
-    await checkForTripEnd(location);
-
     // Update trip with new information
     const updatedTrip = {
       ...currentTrip,
@@ -576,7 +684,6 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Ensure UI is updated with latest speed
     setCurrentLocation(location);
   };
-
   // Start trip detection by monitoring location
   const startTripDetection = async () => {
     const permissionsGranted = await requestLocationPermissions();
@@ -625,7 +732,7 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
         {
           accuracy: Location.Accuracy.BestForNavigation,
           timeInterval: 1000,    // Update every second
-          distanceInterval: 5,   // Minimum 5 meters of movement
+          distanceInterval: 0,   // Minimum 5 meters of movement
         },
         (location) => {
           processLocationUpdate(location);
@@ -664,41 +771,14 @@ export const TripProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /// In TripContext.tsx, update the handlePotentialTripStart function
-const handlePotentialTripStart = async (location: LocationPoint) => {
-  // Don't trigger notifications too frequently
-  const lastNotificationTime = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
-  if (lastNotificationTime) {
-    const lastTime = parseInt(lastNotificationTime, 10);
-    const now = Date.now();
-    // Reduce throttling time for testing (from 60 seconds to 10 seconds)
-    if (now - lastTime < 10 * 1000) {
-      console.log('DEBUG: Notification throttled - last notification was too recent');
-      return;
-    }
-  }
-
-  // Log when notifications are being sent
-  console.log('DEBUG: Showing speed notification for speed:', location.speed);
-
-  await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
-  
-  // Your existing code to show notification
-  showNotification({
-    title: 'Trip Activity Detected',
-    message: `Current speed: ${location.speed.toFixed(1)} km/h`,
-    type: 'info',
-    icon: 'car',
-    duration: 5000,
-    onPress: () => {
-      // If no active trip, start one when user taps notification
-      if (!trip?.isActive) {
-        startTrip();
-        setShowTransportModal(true);
-      }
-    }
-  });
-}
-
+  const handlePotentialTripStart = async (location: LocationPoint) => {
+    // Store the notification time to prevent background notifications too soon
+    await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
+    console.log('DEBUG: Trip detection notification throttle time set');
+    
+    // Don't show any notification here - we already showed it in processLocationUpdate
+    // This function now just marks the timestamp for background task coordination
+  };
   // Handle potential trip end
   const handlePotentialTripEnd = async () => {
     if (!trip || !currentLocation) {
@@ -1037,33 +1117,41 @@ TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
     const tripActive = tripActiveStr === 'true';
 
     // Trip start detection
+    // Trip start detection 
     if (!tripActive && currentSpeed >= TRIP_START_SPEED_THRESHOLD) {
       // Check when we last sent a notification (don't spam notifications)
       const lastNotificationTime = await AsyncStorage.getItem('carbontrack:lastNotificationTime');
-      const canNotify = !lastNotificationTime || 
-        (Date.now() - parseInt(lastNotificationTime, 10)) > 60 * 1000; // 1 minute
+      let canNotify = true;
       
-        if (canNotify) {
-          console.log('DEBUG: [Background] Trip potentially starting - storing notification time');
-          // We can't directly call showNotification from background task
-          // Just store the timestamp - the notification will be shown when app comes to foreground
-          await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
-          
-          // For background mode, we'll use the system notification
-          try {
-            await Notifications.scheduleNotificationAsync({
-              content: {
-                title: 'Trip Activity Detected',
-                body: `Current speed: ${currentSpeed.toFixed(1)} km/h. Tap to view.`,
-                data: { type: 'trip_detection' },
-              },
-              trigger: null, // Send immediately
-            });
-          } catch (error) {
-            console.error('DEBUG: [Background] Failed to send trip notification:', error);
-          }
+      if (lastNotificationTime) {
+        const lastTime = parseInt(lastNotificationTime, 10);
+        const now = Date.now();
+        // More aggressive throttling in background - don't send more often than every 2 minutes
+        if (now - lastTime < 120 * 1000) {
+          console.log('DEBUG: [Background] Notification throttled - too soon since last notification');
+          canNotify = false;
         }
-    } 
+      }
+        
+      if (canNotify) {
+        console.log('DEBUG: [Background] Trip potentially starting - storing notification time');
+        await AsyncStorage.setItem('carbontrack:lastNotificationTime', Date.now().toString());
+        
+        try {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Trip Activity Detected',
+              body: `Current speed: ${currentSpeed.toFixed(1)} km/h. Tap to view.`,
+              data: { type: 'trip_detection' },
+            },
+            trigger: null, // Send immediately
+          });
+          console.log('DEBUG: [Background] Trip notification sent successfully');
+        } catch (error) {
+          console.error('DEBUG: [Background] Failed to send trip notification:', error);
+        }
+      }
+    }
     // Trip end detection
     else if (tripActive) {
       const lowSpeedStartTimeStr = await AsyncStorage.getItem(LOW_SPEED_START_TIME_KEY);

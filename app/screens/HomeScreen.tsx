@@ -36,6 +36,8 @@ export default function HomeScreen() {
       stopTripDetection();
     };
   }, []);
+
+  
   
   // Timer for active trip
   useEffect(() => {
