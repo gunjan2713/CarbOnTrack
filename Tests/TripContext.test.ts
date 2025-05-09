@@ -1,3 +1,4 @@
+
 import {
   calculateDistance,
   isValidCoordinate,
@@ -20,6 +21,12 @@ describe('calculateDistance()', () => {
     expect(d).toBeGreaterThan(2000);
     expect(d).toBeLessThan(2500);
   });
+  
+  // New test
+  test('handles antipodal points correctly', () => {
+    const d = calculateDistance(0, 0, 0, 180);
+    expect(d).toBeCloseTo(20015, 0); // Half the Earth's circumference, ~20,015 km
+  });
 });
 
 describe('isValidCoordinate()', () => {
@@ -35,6 +42,12 @@ describe('isValidCoordinate()', () => {
   test('0,0 returns false', () => {
     expect(isValidCoordinate(0, 0)).toBe(false);
   });
+  
+
+  test('rejects NaN values', () => {
+    expect(isValidCoordinate(NaN, 55)).toBe(false);
+    expect(isValidCoordinate(25, NaN)).toBe(false);
+  });
 });
 
 describe('calculateEmissions()', () => {
@@ -45,6 +58,15 @@ describe('calculateEmissions()', () => {
   test('calculates emissions properly', () => {
     const trip = { distance: 50, transportMode: { emissionFactor: 0.2 } };
     expect(calculateEmissions(trip)).toBeCloseTo(10);
+  });
+  
+
+  test('returns 0 for zero-emission transport modes', () => {
+    const trip = { 
+      distance: 10, 
+      transportMode: { emissionFactor: 0 } 
+    };
+    expect(calculateEmissions(trip)).toBe(0);
   });
 });
 
@@ -57,6 +79,14 @@ describe('createNewTrip()', () => {
     expect(trip.isActive).toBe(true);
     expect(trip.startLocation).toEqual(loc);
     expect(trip.locations.length).toBe(1);
+  });
+  
+
+  test('initializes distance to zero', () => {
+    const loc = { latitude: 25, longitude: 55, speed: 10, timestamp: Date.now() };
+    const trip = createNewTrip(loc);
+    
+    expect(trip.distance).toBe(0);
   });
 });
 
@@ -79,6 +109,20 @@ describe('handleActiveTripUpdate()', () => {
     expect(updated.locations.length).toBe(2);
     expect(updated.distance).toBeCloseTo(0);
   });
+  
+  
+  test('preserves existing trip properties when updating', () => {
+    const loc1 = { latitude: 25.2769, longitude: 55.2962, timestamp: 1, speed: 10 };
+    const loc2 = { latitude: 25.2779, longitude: 55.2972, timestamp: 2, speed: 12 };
+    const trip = {
+      ...createNewTrip(loc1),
+      transportMode: { id: 'car', name: 'Car', emissionFactor: 0.2, icon: '🚗' }
+    };
+    
+    const updated = handleActiveTripUpdate(trip, loc2);
+    
+    expect(updated.transportMode).toEqual(trip.transportMode);
+  });
 });
 
 describe('selectTransportMode()', () => {
@@ -89,6 +133,23 @@ describe('selectTransportMode()', () => {
 
     expect(updated.transportMode).toEqual(mode);
     expect(updated.carbonEmissions).toBeCloseTo(8.9);
+  });
+  
+
+  test('updates emissions when transport mode changes', () => {
+    const trip = { 
+      id: '1', 
+      distance: 50, 
+      isActive: true, 
+      locations: [],
+      transportMode: { id: 'car', emissionFactor: 0.2 },
+      carbonEmissions: 10 // 50 * 0.2
+    };
+    
+    const newMode = { id: 'bicycle', emissionFactor: 0 };
+    const updated = selectTransportMode(trip, newMode);
+    
+    expect(updated.carbonEmissions).toBe(0); // 50 * 0
   });
 });
 
@@ -129,8 +190,36 @@ describe('endTrip()', () => {
     }));
     expect(mockLoadTripHistory).toHaveBeenCalled();
   });
+  
+ 
+  test('adds endTime when trip is ended', async () => {
+    const mockSaveTrip = jest.fn().mockResolvedValue(undefined);
+    const mockSetTrip = jest.fn();
+    const mockTrip = {
+      id: 'trip1',
+      distance: 5,
+      startTime: new Date(2023, 1, 1),
+      isActive: true,
+      locations: [{ latitude: 0, longitude: 0, speed: 0, timestamp: Date.now() }],
+      transportMode: { id: 'walk', name: 'Walking', emissionFactor: 0, icon: '🚶' }
+    };
+    
+    const endTripFn = endTrip({
+      trip: mockTrip,
+      currentLocation: { latitude: 1, longitude: 1, speed: 0, timestamp: Date.now() },
+      user: { uid: 'user1' },
+      calculateEmissions: () => 0,
+      saveTrip: mockSaveTrip,
+      loadTripHistory: jest.fn().mockResolvedValue([]),
+      setTrip: mockSetTrip,
+      setLowSpeedStartTime: jest.fn(),
+    });
+    
+    await endTripFn();
+    
+    // Verify trip was saved with an endTime property
+    expect(mockSaveTrip).toHaveBeenCalledWith('user1', expect.objectContaining({
+      endTime: expect.any(Date)
+    }));
+  });
 });
-
-
-
-
