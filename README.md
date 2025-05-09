@@ -9,6 +9,7 @@ The CarbOnTrack project aims to address the growing need for environmental susta
 ```
 
 cd CarbOnTrack
+git clone https://github.com/gunjan2713/CarbOnTrack.git
 ```
 #### 2. Install Frontend Dependencies
 Navigate to the project directory and install the necessary dependencies using npm:
@@ -44,3 +45,10 @@ npx expo run
 
 ```
 Press i on keyboard and it will open Xcode with the application 
+
+## Testing Instructions
+
+#### 1. Run this command
+```
+npx jest
+```
