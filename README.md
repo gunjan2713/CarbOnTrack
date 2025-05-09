@@ -50,5 +50,5 @@ Press i on keyboard and it will open Xcode with the application
 
 #### 1. Run this command
 ```
-npx jest
+npx jest --coverage
 ```
