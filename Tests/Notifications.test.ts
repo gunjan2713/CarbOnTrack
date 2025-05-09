@@ -1,4 +1,3 @@
-// import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
 jest.mock('@react-native-async-storage/async-storage');
@@ -40,5 +39,20 @@ describe('Notifications', () => {
     };
     const result = notification.request.content.data.type === 'trip_detection';
     expect(result).toBe(true);
+  });
+  
+  
+  test('isTripDetectionNotification returns false for other notification types', () => {
+    const notification = {
+      request: {
+        content: {
+          data: {
+            type: 'trip_end_suggestion'
+          }
+        }
+      }
+    };
+    const result = notification.request.content.data.type === 'trip_detection';
+    expect(result).toBe(false);
   });
 });
